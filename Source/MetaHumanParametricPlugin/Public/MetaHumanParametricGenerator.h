@@ -182,14 +182,27 @@ private:
 		const FMetaHumanAppearanceConfig& AppearanceConfig);
 
 	/**
-	 * 步骤 4: 生成角色资产（网格、材质、纹理等）
+	 * 步骤 4: 下载纹理源数据（新增）
+	 * 在生成资产前下载所需的纹理源数据，避免 "Texture generated for assembly without source data" 错误
+	 */
+	static bool DownloadTextureSourceData(UMetaHumanCharacter* Character);
+
+private:
+	/**
+	 * 下载纹理源数据的实际实现函数
+	 * 线程安全的实现，处理后台线程调用
+	 */
+	static bool DownloadTextureSourceData_Impl(UMetaHumanCharacter* Character, UMetaHumanCharacterEditorSubsystem* EditorSubsystem);
+
+	/**
+	 * 步骤 5: 生成角色资产（网格、材质、纹理等）
 	 */
 	static bool GenerateCharacterAssets(
 		UMetaHumanCharacter* Character,
 		FMetaHumanCharacterGeneratedAssets& OutAssets);
 
 	/**
-	 * 步骤 5: 保存资产到磁盘
+	 * 步骤 6: 保存资产到磁盘
 	 */
 	static bool SaveCharacterAssets(
 		UMetaHumanCharacter* Character,

@@ -5,10 +5,10 @@
 #include "CoreMinimal.h"
 #include "Modules/ModuleManager.h"
 
+class SNotificationItem;
+
 /**
  * MetaHuman Parametric Plugin Module
- *
- * 提供程序化创建和定制 MetaHuman 角色的 C++ API
  */
 class FMetaHumanParametricPluginModule : public IModuleInterface
 {

@@ -17,7 +17,6 @@ extern void Example_PluginTest();
 
 void FMetaHumanParametricPluginModule::StartupModule()
 {
-	// 插件启动时的初始化代码
 	UE_LOG(LogTemp, Log, TEXT("MetaHumanParametricPlugin module has been loaded"));
 
 	// Register menu extensions
@@ -26,16 +25,13 @@ void FMetaHumanParametricPluginModule::StartupModule()
 
 void FMetaHumanParametricPluginModule::ShutdownModule()
 {
-	// 清理菜单扩展
 	UToolMenus::UnregisterOwner(this);
 
-	// 插件关闭时的清理代码
 	UE_LOG(LogTemp, Log, TEXT("MetaHumanParametricPlugin module has been unloaded"));
 }
 
 void FMetaHumanParametricPluginModule::RegisterMenuExtensions()
 {
-	// 等待 ToolMenus 模块加载
 	UToolMenus::RegisterStartupCallback(
 		FSimpleMulticastDelegate::FDelegate::CreateStatic(&FMetaHumanParametricPluginModule::AddToolbarExtension)
 	);
@@ -44,7 +40,6 @@ void FMetaHumanParametricPluginModule::RegisterMenuExtensions()
 void FMetaHumanParametricPluginModule::AddToolbarExtension()
 {
 	UE_LOG(LogTemp, Warning, TEXT("AddToolbarExtension called"));
-	// 获取 Level Editor 工具栏菜单
 	UToolMenu* Menu = UToolMenus::Get()->ExtendMenu("LevelEditor.LevelEditorToolBar.User");
 	if (!Menu)
 	{
@@ -52,11 +47,9 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 		return;
 	}
 
-	// 添加一个新的 Section
 	FToolMenuSection& Section = Menu->FindOrAddSection("MetaHumanGenerator");
 	Section.Label = LOCTEXT("MetaHumanGenerator", "MetaHuman Generator");
 
-	// 添加下拉菜单
 	Section.AddSubMenu(
 		"MetaHumanExamples",
 		LOCTEXT("MetaHumanExamplesLabel", "MetaHuman Examples"),
@@ -76,7 +69,6 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 
 			SubSection.AddSeparator("TestSeparator");
 
-			// 示例 1: 苗条女性
 			FToolMenuEntry& Entry1 = SubSection.AddMenuEntry(
 				"SlenderFemale",
 				LOCTEXT("SlenderFemaleLabel", "1. Slender Female"),
@@ -85,7 +77,6 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnGenerateSlenderFemale))
 			);
 
-			// 示例 2: 强壮男性
 			FToolMenuEntry& Entry2 = SubSection.AddMenuEntry(
 				"MuscularMale",
 				LOCTEXT("MuscularMaleLabel", "2. Muscular Male"),
@@ -94,7 +85,6 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnGenerateMuscularMale))
 			);
 
-			// 示例 3: 矮小圆润
 			FToolMenuEntry& Entry3 = SubSection.AddMenuEntry(
 				"ShortRounded",
 				LOCTEXT("ShortRoundedLabel", "3. Short Rounded"),
@@ -121,15 +111,12 @@ void FMetaHumanParametricPluginModule::OnGenerateSlenderFemale()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 1: Slender Female..."));
 
-	// 显示通知
 	FNotificationInfo Info(LOCTEXT("GeneratingSlenderFemale", "Generating Slender Female Character..."));
 	Info.ExpireDuration = 3.0f;
 	FSlateNotificationManager::Get().AddNotification(Info);
 
-	// 调用示例函数
 	Example1_CreateSlenderFemale();
 
-	// 完成通知
 	FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete", "Character Generation Complete! Check Output Log."));
 	CompletedInfo.ExpireDuration = 5.0f;
 	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
