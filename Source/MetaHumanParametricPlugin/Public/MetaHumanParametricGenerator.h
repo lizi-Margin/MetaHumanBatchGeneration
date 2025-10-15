@@ -187,6 +187,41 @@ private:
 	 */
 	static bool DownloadTextureSourceData(UMetaHumanCharacter* Character);
 
+	// ============================================================================
+	// MetaHuman Cloud Services Authentication (新增)
+	// ============================================================================
+
+	/**
+	 * 检查并确保用户已登录到 MetaHuman 云服务
+	 * 如果未登录，会尝试自动登录（使用持久化凭据）或打开浏览器登录门户
+	 *
+	 * @return true if user is logged in, false if login failed
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Authentication")
+	static bool EnsureCloudServicesLogin();
+
+	/**
+	 * 异步检查用户是否已登录
+	 *
+	 * @param OnCheckComplete Callback with boolean result (true = logged in)
+	 */
+	static void CheckCloudServicesLoginAsync(TFunction<void(bool)> OnCheckComplete);
+
+	/**
+	 * 异步执行云服务登录
+	 * 先尝试持久化凭据登录，失败则打开浏览器账户门户登录
+	 *
+	 * @param OnLoginComplete Callback when login succeeds
+	 * @param OnLoginFailed Callback when login fails
+	 */
+	static void LoginToCloudServicesAsync(TFunction<void()> OnLoginComplete, TFunction<void()> OnLoginFailed);
+
+	/**
+	 * 测试云服务认证功能（调试用）
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Debug")
+	static void TestCloudAuthentication();
+
 private:
 	/**
 	 * 下载纹理源数据的实际实现函数

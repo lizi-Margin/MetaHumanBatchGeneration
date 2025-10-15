@@ -22,6 +22,7 @@
 #include "Tasks/Task.h"
 #include "Misc/DateTime.h"
 #include "Cloud/MetaHumanARServiceRequest.h"
+#include "Cloud/MetaHumanServiceRequest.h"  // For ServiceAuthentication namespace
 
 // ============================================================================
 // Main Generation Function
@@ -37,6 +38,18 @@ bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
 	UE_LOG(LogTemp, Log, TEXT("=== MetaHuman Parametric Generation Started ==="));
 	UE_LOG(LogTemp, Log, TEXT("Character Name: %s"), *CharacterName);
 	UE_LOG(LogTemp, Log, TEXT("Output Path: %s"), *OutputPath);
+
+	// Step 0: Check authentication FIRST (新增)
+	UE_LOG(LogTemp, Log, TEXT("[Step 0/6] Verifying MetaHuman cloud services authentication..."));
+	if (!EnsureCloudServicesLogin())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to authenticate with MetaHuman cloud services!"));
+		UE_LOG(LogTemp, Error, TEXT("  Cloud operations (AutoRig, texture download) require authentication"));
+		UE_LOG(LogTemp, Error, TEXT("  Please login manually via: Window > MetaHuman > Cloud Services"));
+		UE_LOG(LogTemp, Error, TEXT("  Or ensure your Epic Games account has MetaHuman access"));
+		return false;
+	}
+	UE_LOG(LogTemp, Log, TEXT("[Step 0/6] ✓ Authentication verified - cloud services available"));
 
 	// Step 1: Create base Character asset
 	UE_LOG(LogTemp, Log, TEXT("[Step 1/5] Creating base MetaHuman Character asset..."));
@@ -690,75 +703,112 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 
 	if (RigState != EMetaHumanCharacterRigState::Rigged)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Character is not rigged, performing autorig first..."));
+		UE_LOG(LogTemp, Log, TEXT("Character is not rigged, performing autorig with retry logic..."));
 
-		// Check if auto-rigging is already in progress
-		if (EditorSubsystem->IsAutoRiggingFace(Character))
+		// Retry autorig up to 5 times in case of network errors
+		const int32 MaxRetries = 1;
+		bool bAutorigSucceeded = false;
+
+		for (int32 RetryCount = 0; RetryCount < MaxRetries && !bAutorigSucceeded; ++RetryCount)
 		{
-			UE_LOG(LogTemp, Log, TEXT("Autorig already in progress, waiting..."));
-
-			// Wait for auto-rigging to complete
-			const float MaxAutorigWaitTime = 300.0f; // 5 minutes
-			const float AutorigStartTime = FPlatformTime::Seconds();
-
-			while (EditorSubsystem->IsAutoRiggingFace(Character))
+			if (RetryCount > 0)
 			{
-				const float AutorigElapsedTime = FPlatformTime::Seconds() - AutorigStartTime;
-				if (AutorigElapsedTime > MaxAutorigWaitTime)
-				{
-					UE_LOG(LogTemp, Warning, TEXT("Autorig timeout after %.1f seconds"), AutorigElapsedTime);
-					break;
-				}
-
-				// In background thread, no need to manually handle tick
-				FPlatformProcess::Sleep(1.0f); // Longer sleep time because this is a background operation
+				UE_LOG(LogTemp, Warning, TEXT("Autorig attempt %d/%d (retrying after failure)..."), RetryCount + 1, MaxRetries);
 			}
-		}
-		else
-		{
-			// Execute auto-rigging
-			UE_LOG(LogTemp, Log, TEXT("Starting autorig..."));
-			EditorSubsystem->AutoRigFace(Character, UE::MetaHuman::ERigType::JointsAndBlendshapes);
-
-			// Wait for auto-rigging to complete
-			const float MaxAutorigWaitTime = 300.0f; // 5 minutes
-			const float AutorigStartTime = FPlatformTime::Seconds();
-			float LastAutorigProgress = 0.0f;
-
-			while (EditorSubsystem->IsAutoRiggingFace(Character))
+			else
 			{
-				const float AutorigElapsedTime = FPlatformTime::Seconds() - AutorigStartTime;
-
-				// Report progress every 15 seconds
-				if (AutorigElapsedTime - LastAutorigProgress > 15.0f)
-				{
-					UE_LOG(LogTemp, Log, TEXT("Autorig in progress... (%.1f seconds elapsed)"), AutorigElapsedTime);
-					LastAutorigProgress = AutorigElapsedTime;
-				}
-
-				if (AutorigElapsedTime > MaxAutorigWaitTime)
-				{
-					UE_LOG(LogTemp, Warning, TEXT("Autorig timeout after %.1f seconds"), AutorigElapsedTime);
-					break;
-				}
-
-				// In background thread, no need to manually handle tick
-				FPlatformProcess::Sleep(1.0f); // Longer sleep time because this is a background operation
+				UE_LOG(LogTemp, Log, TEXT("Autorig attempt %d/%d..."), RetryCount + 1, MaxRetries);
 			}
 
-			const float AutorigTotalTime = FPlatformTime::Seconds() - AutorigStartTime;
-			UE_LOG(LogTemp, Log, TEXT("Autorig completed in %.1f seconds"), AutorigTotalTime);
+			// Check if auto-rigging is already in progress
+			if (EditorSubsystem->IsAutoRiggingFace(Character))
+			{
+				UE_LOG(LogTemp, Log, TEXT("Autorig already in progress, waiting..."));
+
+				// Wait for auto-rigging to complete
+				const float MaxAutorigWaitTime = 300.0f; // 5 minutes
+				const float AutorigStartTime = FPlatformTime::Seconds();
+
+				while (EditorSubsystem->IsAutoRiggingFace(Character))
+				{
+					const float AutorigElapsedTime = FPlatformTime::Seconds() - AutorigStartTime;
+					if (AutorigElapsedTime > MaxAutorigWaitTime)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("Autorig timeout after %.1f seconds (likely network timeout)"), AutorigElapsedTime);
+						break;
+					}
+
+					// In background thread, no need to manually handle tick
+					FPlatformProcess::Sleep(1.0f); // Longer sleep time because this is a background operation
+				}
+			}
+			else
+			{
+				// Execute auto-rigging
+				UE_LOG(LogTemp, Log, TEXT("Starting autorig..."));
+				EditorSubsystem->AutoRigFace(Character, UE::MetaHuman::ERigType::JointsAndBlendshapes);
+
+				// Wait for auto-rigging to complete
+				const float MaxAutorigWaitTime = 300.0f; // 5 minutes
+				const float AutorigStartTime = FPlatformTime::Seconds();
+				float LastAutorigProgress = 0.0f;
+
+				while (EditorSubsystem->IsAutoRiggingFace(Character))
+				{
+					const float AutorigElapsedTime = FPlatformTime::Seconds() - AutorigStartTime;
+
+					// Report progress every 15 seconds
+					if (AutorigElapsedTime - LastAutorigProgress > 15.0f)
+					{
+						UE_LOG(LogTemp, Log, TEXT("Autorig in progress... (%.1f seconds elapsed)"), AutorigElapsedTime);
+						LastAutorigProgress = AutorigElapsedTime;
+					}
+
+					if (AutorigElapsedTime > MaxAutorigWaitTime)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("Autorig timeout after %.1f seconds (likely network timeout: HTTP request timed out)"), AutorigElapsedTime);
+						break;
+					}
+
+					// In background thread, no need to manually handle tick
+					FPlatformProcess::Sleep(1.0f); // Longer sleep time because this is a background operation
+				}
+
+				const float AutorigTotalTime = FPlatformTime::Seconds() - AutorigStartTime;
+				UE_LOG(LogTemp, Log, TEXT("Autorig operation took %.1f seconds"), AutorigTotalTime);
+			}
+
+			// Check rigging state after this attempt
+			RigState = EditorSubsystem->GetRiggingState(Character);
+			if (RigState == EMetaHumanCharacterRigState::Rigged)
+			{
+				bAutorigSucceeded = true;
+				UE_LOG(LogTemp, Log, TEXT("✓ Character successfully rigged after %d attempt(s)"), RetryCount + 1);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("✗ Autorig attempt %d/%d failed (character not rigged)"),
+					RetryCount + 1, MaxRetries);
+
+				// Wait a bit before retrying (exponential backoff)
+				if (RetryCount < MaxRetries - 1)
+				{
+					const float WaitTime = FMath::Pow(2.0f, RetryCount) * 2.0f; // 2s, 4s, 8s, 16s
+					UE_LOG(LogTemp, Log, TEXT("Waiting %.1f seconds before retry..."), WaitTime);
+					FPlatformProcess::Sleep(WaitTime);
+				}
+			}
 		}
 
-		// Check rigging state again
-		RigState = EditorSubsystem->GetRiggingState(Character);
-		if (RigState != EMetaHumanCharacterRigState::Rigged)
+		// Final check after all retries
+		if (!bAutorigSucceeded)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Warning: Character still not rigged after autorig attempt, continuing with texture download anyway"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Log, TEXT("Character successfully rigged"));
+			UE_LOG(LogTemp, Warning, TEXT("Warning: Character still not rigged after %d autorig attempts"), MaxRetries);
+			UE_LOG(LogTemp, Warning, TEXT("  Common causes:"));
+			UE_LOG(LogTemp, Warning, TEXT("  - Network timeout (HTTP request to autorig service timed out after 300s)"));
+			UE_LOG(LogTemp, Warning, TEXT("  - MetaHuman cloud service unavailable"));
+			UE_LOG(LogTemp, Warning, TEXT("  - Not logged into MetaHuman cloud services"));
+			UE_LOG(LogTemp, Warning, TEXT("  Continuing with texture download anyway..."));
 		}
 	}
 	else
@@ -825,3 +875,180 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 		return false;
 	}
 }
+
+// ============================================================================
+// MetaHuman Cloud Services Authentication Functions (新增)
+// ============================================================================
+
+bool UMetaHumanParametricGenerator::EnsureCloudServicesLogin()
+{
+	UE_LOG(LogTemp, Log, TEXT("Checking MetaHuman cloud services login status..."));
+
+	bool bIsLoggedIn = false;
+	bool bCheckComplete = false;
+
+	// 异步检查登录状态
+	UE::MetaHuman::ServiceAuthentication::CheckHasLoggedInUserAsync(
+		UE::MetaHuman::ServiceAuthentication::FOnCheckHasLoggedInUserCompleteDelegate::CreateLambda(
+			[&bIsLoggedIn, &bCheckComplete](bool bLoggedIn)
+			{
+				bIsLoggedIn = bLoggedIn;
+				bCheckComplete = true;
+			}
+		)
+	);
+
+	// 等待检查完成（最多等待 5 秒）
+	const float MaxWaitTime = 5.0f;
+	const float StartTime = FPlatformTime::Seconds();
+	while (!bCheckComplete && (FPlatformTime::Seconds() - StartTime) < MaxWaitTime)
+	{
+		FPlatformProcess::Sleep(0.1f);
+	}
+
+	if (!bCheckComplete)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Timeout while checking cloud services login status"));
+		return false;
+	}
+
+	if (bIsLoggedIn)
+	{
+		UE_LOG(LogTemp, Log, TEXT("✓ User is already logged in to MetaHuman cloud services"));
+		return true;
+	}
+
+	// 用户未登录，尝试登录
+	UE_LOG(LogTemp, Warning, TEXT("User is not logged in. Attempting automatic login..."));
+	UE_LOG(LogTemp, Warning, TEXT("  Note: A browser window may open for Epic Games login"));
+
+	bool bLoginSucceeded = false;
+	bool bLoginComplete = false;
+
+	UE::MetaHuman::ServiceAuthentication::LoginToAuthEnvironment(
+		UE::MetaHuman::ServiceAuthentication::FOnLoginCompleteDelegate::CreateLambda(
+			[&bLoginSucceeded, &bLoginComplete]()
+			{
+				bLoginSucceeded = true;
+				bLoginComplete = true;
+				UE_LOG(LogTemp, Log, TEXT("✓ Successfully logged in to MetaHuman cloud services"));
+			}
+		),
+		UE::MetaHuman::ServiceAuthentication::FOnLoginFailedDelegate::CreateLambda(
+			[&bLoginSucceeded, &bLoginComplete]()
+			{
+				bLoginSucceeded = false;
+				bLoginComplete = true;
+				UE_LOG(LogTemp, Error, TEXT("✗ Failed to login to MetaHuman cloud services"));
+			}
+		)
+	);
+
+	// 等待登录完成（最多等待 60 秒，因为可能需要打开浏览器）
+	const float MaxLoginWaitTime = 60.0f;
+	const float LoginStartTime = FPlatformTime::Seconds();
+	float LastProgressReport = 0.0f;
+
+	while (!bLoginComplete && (FPlatformTime::Seconds() - LoginStartTime) < MaxLoginWaitTime)
+	{
+		const float ElapsedTime = FPlatformTime::Seconds() - LoginStartTime;
+
+		// 每 5 秒报告一次进度
+		if (ElapsedTime - LastProgressReport > 5.0f)
+		{
+			UE_LOG(LogTemp, Log, TEXT("Still waiting for login... (%.1f seconds elapsed)"), ElapsedTime);
+			UE_LOG(LogTemp, Log, TEXT("  If a browser window opened, please complete the login process"));
+			LastProgressReport = ElapsedTime;
+		}
+
+		FPlatformProcess::Sleep(0.5f);
+	}
+
+	if (!bLoginComplete)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Timeout while waiting for cloud services login (waited %.1f seconds)"), MaxLoginWaitTime);
+		UE_LOG(LogTemp, Warning, TEXT("  Possible causes:"));
+		UE_LOG(LogTemp, Warning, TEXT("  - Login browser window was not completed"));
+		UE_LOG(LogTemp, Warning, TEXT("  - Network connectivity issues"));
+		UE_LOG(LogTemp, Warning, TEXT("  - MetaHuman cloud services unavailable"));
+		UE_LOG(LogTemp, Warning, TEXT("  - EOS (Epic Online Services) configuration missing"));
+		return false;
+	}
+
+	return bLoginSucceeded;
+}
+
+void UMetaHumanParametricGenerator::CheckCloudServicesLoginAsync(TFunction<void(bool)> OnCheckComplete)
+{
+	UE::MetaHuman::ServiceAuthentication::CheckHasLoggedInUserAsync(
+		UE::MetaHuman::ServiceAuthentication::FOnCheckHasLoggedInUserCompleteDelegate::CreateLambda(
+			[OnCheckComplete](bool bLoggedIn)
+			{
+				if (OnCheckComplete)
+				{
+					OnCheckComplete(bLoggedIn);
+				}
+			}
+		)
+	);
+}
+
+void UMetaHumanParametricGenerator::LoginToCloudServicesAsync(
+	TFunction<void()> OnLoginComplete,
+	TFunction<void()> OnLoginFailed)
+{
+	UE::MetaHuman::ServiceAuthentication::LoginToAuthEnvironment(
+		UE::MetaHuman::ServiceAuthentication::FOnLoginCompleteDelegate::CreateLambda(
+			[OnLoginComplete]()
+			{
+				UE_LOG(LogTemp, Log, TEXT("✓ Successfully logged in to MetaHuman cloud services"));
+				if (OnLoginComplete)
+				{
+					OnLoginComplete();
+				}
+			}
+		),
+		UE::MetaHuman::ServiceAuthentication::FOnLoginFailedDelegate::CreateLambda(
+			[OnLoginFailed]()
+			{
+				UE_LOG(LogTemp, Error, TEXT("✗ Failed to login to MetaHuman cloud services"));
+				if (OnLoginFailed)
+				{
+					OnLoginFailed();
+				}
+			}
+		)
+	);
+}
+
+void UMetaHumanParametricGenerator::TestCloudAuthentication()
+{
+	UE_LOG(LogTemp, Log, TEXT("=== Testing MetaHuman Cloud Authentication ==="));
+
+	CheckCloudServicesLoginAsync([](bool bLoggedIn)
+	{
+		if (bLoggedIn)
+		{
+			UE_LOG(LogTemp, Log, TEXT("✓ User is logged in to MetaHuman cloud services"));
+			UE_LOG(LogTemp, Log, TEXT("  Cloud operations (AutoRig, texture download) should work"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("✗ User is NOT logged in"));
+			UE_LOG(LogTemp, Warning, TEXT("  Attempting automatic login..."));
+
+			LoginToCloudServicesAsync(
+				[]()
+				{
+					UE_LOG(LogTemp, Log, TEXT("✓ Login succeeded! Cloud services are now available."));
+				},
+				[]()
+				{
+					UE_LOG(LogTemp, Error, TEXT("✗ Login failed! Please login manually via:"));
+					UE_LOG(LogTemp, Error, TEXT("  Window > MetaHuman > Cloud Services"));
+				}
+			);
+		}
+	});
+}
+
