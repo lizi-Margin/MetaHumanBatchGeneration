@@ -21,6 +21,7 @@
 #include "HAL/PlatformProcess.h"
 #include "Tasks/Task.h"
 #include "Misc/DateTime.h"
+#include "Cloud/MetaHumanARServiceRequest.h"
 
 // ============================================================================
 // 主要生成函数
@@ -608,10 +609,35 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData(UMetaHumanCharacte
 		return false;
 	}
 
-	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+	// 确保在游戏线程中获取 EditorSubsystem
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = nullptr;
+	if (IsInGameThread())
+	{
+		EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+	}
+	else
+	{
+		// 如果不在游戏线程，我们直接返回 false，让主线程处理
+		// 这是因为 MetaHuman 操作必须在游戏线程中进行
+		UE_LOG(LogTemp, Warning, TEXT("DownloadTextureSourceData called from background thread - returning false. MetaHuman operations must run on game thread."));
+		UE_LOG(LogTemp, Warning, TEXT("  This is normal - texture download will be handled by the main generation process."));
+		return false;
+	}
+
 	if (!EditorSubsystem)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to get editor subsystem for texture download"));
+		return false;
+	}
+
+	return DownloadTextureSourceData_Impl(Character, EditorSubsystem);
+}
+
+bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCharacter* Character, UMetaHumanCharacterEditorSubsystem* EditorSubsystem)
+{
+	if (!Character || !EditorSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid parameters for texture download implementation"));
 		return false;
 	}
 
@@ -634,8 +660,8 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData(UMetaHumanCharacte
 			}
 
 			// 处理编辑器 tick，让下载继续进行
-			FTaskGraphInterface::Get().ProcessThreadUntilIdle(ENamedThreads::GameThread);
-			FPlatformProcess::Sleep(0.1f);
+			// 注意：在后台线程中，我们不需要手动处理 tick
+			FPlatformProcess::Sleep(0.5f); // 在后台线程中可以安全地使用较长的睡眠时间
 		}
 
 		UE_LOG(LogTemp, Log, TEXT("Texture download completed"));
@@ -656,39 +682,146 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData(UMetaHumanCharacte
 		return false;
 	}
 
-	// 请求 2k 分辨率纹理（如需更高分辨率，可改为 Res4k 或 Res8k）
+	// 步骤 1: 检查是否需要自动绑定（autorig）
+	UE_LOG(LogTemp, Log, TEXT("Checking if autorig is required before texture download..."));
+
+	// 获取当前的绑定状态
+	EMetaHumanCharacterRigState RigState = EditorSubsystem->GetRiggingState(Character);
+
+	if (RigState != EMetaHumanCharacterRigState::Rigged)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Character is not rigged, performing autorig first..."));
+
+		// 检查是否已经在进行自动绑定
+		if (EditorSubsystem->IsAutoRiggingFace(Character))
+		{
+			UE_LOG(LogTemp, Log, TEXT("Autorig already in progress, waiting..."));
+
+			// 等待自动绑定完成
+			const float MaxAutorigWaitTime = 300.0f; // 5分钟
+			const float AutorigStartTime = FPlatformTime::Seconds();
+
+			while (EditorSubsystem->IsAutoRiggingFace(Character))
+			{
+				const float AutorigElapsedTime = FPlatformTime::Seconds() - AutorigStartTime;
+				if (AutorigElapsedTime > MaxAutorigWaitTime)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Autorig timeout after %.1f seconds"), AutorigElapsedTime);
+					break;
+				}
+
+				// 在后台线程中不需要手动处理 tick
+				FPlatformProcess::Sleep(1.0f); // 较长的睡眠时间，因为这是后台操作
+			}
+		}
+		else
+		{
+			// 执行自动绑定
+			UE_LOG(LogTemp, Log, TEXT("Starting autorig..."));
+			EditorSubsystem->AutoRigFace(Character, UE::MetaHuman::ERigType::JointsAndBlendshapes);
+
+			// 等待自动绑定完成
+			const float MaxAutorigWaitTime = 300.0f; // 5分钟
+			const float AutorigStartTime = FPlatformTime::Seconds();
+			float LastAutorigProgress = 0.0f;
+
+			while (EditorSubsystem->IsAutoRiggingFace(Character))
+			{
+				const float AutorigElapsedTime = FPlatformTime::Seconds() - AutorigStartTime;
+
+				// 每15秒报告一次进度
+				if (AutorigElapsedTime - LastAutorigProgress > 15.0f)
+				{
+					UE_LOG(LogTemp, Log, TEXT("Autorig in progress... (%.1f seconds elapsed)"), AutorigElapsedTime);
+					LastAutorigProgress = AutorigElapsedTime;
+				}
+
+				if (AutorigElapsedTime > MaxAutorigWaitTime)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Autorig timeout after %.1f seconds"), AutorigElapsedTime);
+					break;
+				}
+
+				// 在后台线程中不需要手动处理 tick
+				FPlatformProcess::Sleep(1.0f); // 较长的睡眠时间，因为这是后台操作
+			}
+
+			const float AutorigTotalTime = FPlatformTime::Seconds() - AutorigStartTime;
+			UE_LOG(LogTemp, Log, TEXT("Autorig completed in %.1f seconds"), AutorigTotalTime);
+		}
+
+		// 再次检查绑定状态
+		RigState = EditorSubsystem->GetRiggingState(Character);
+		if (RigState != EMetaHumanCharacterRigState::Rigged)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Warning: Character still not rigged after autorig attempt, continuing with texture download anyway"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("Character successfully rigged"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("Character is already rigged, skipping autorig"));
+	}
+
+	// 步骤 2: 请求纹理下载
 	UE_LOG(LogTemp, Log, TEXT("Requesting 2k texture download..."));
+	UE_LOG(LogTemp, Warning, TEXT("Note: This requires MetaHuman cloud services login. If not logged in, download will fail but generation will continue with default textures."));
+
 	EditorSubsystem->RequestHighResolutionTextures(Character, ERequestTextureResolution::Res2k);
 
 	// 等待下载完成
 	const float MaxWaitTime = 120.0f; // 纹理下载可能需要更长时间
 	const float StartTime = FPlatformTime::Seconds();
 	float LastProgressReport = 0.0f;
+	bool bDownloadStarted = false;
 
 	while (EditorSubsystem->IsRequestingHighResolutionTextures(Character))
 	{
 		const float ElapsedTime = FPlatformTime::Seconds() - StartTime;
+		bDownloadStarted = true;
 
 		// 每10秒报告一次进度
 		if (ElapsedTime - LastProgressReport > 10.0f)
 		{
 			UE_LOG(LogTemp, Log, TEXT("Still downloading textures... (%.1f seconds elapsed)"), ElapsedTime);
+			UE_LOG(LogTemp, Log, TEXT("  Make sure you're logged into MetaHuman cloud services in the editor"));
 			LastProgressReport = ElapsedTime;
 		}
 
 		if (ElapsedTime > MaxWaitTime)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Texture download timeout after %.1f seconds"), ElapsedTime);
-			return false;
+			UE_LOG(LogTemp, Warning, TEXT("  Possible causes:"));
+			UE_LOG(LogTemp, Warning, TEXT("  - Not logged into MetaHuman cloud services"));
+			UE_LOG(LogTemp, Warning, TEXT("  - Network connectivity issues"));
+			UE_LOG(LogTemp, Warning, TEXT("  - Service temporarily unavailable"));
+			break;
 		}
 
-		// 处理编辑器 tick
-		FTaskGraphInterface::Get().ProcessThreadUntilIdle(ENamedThreads::GameThread);
-		FPlatformProcess::Sleep(0.1f);
+		// 在后台线程中不需要手动处理编辑器 tick
+		FPlatformProcess::Sleep(1.0f); // 后台线程可以使用更长的睡眠间隔
 	}
 
 	const float TotalTime = FPlatformTime::Seconds() - StartTime;
-	UE_LOG(LogTemp, Log, TEXT("Texture download completed in %.1f seconds"), TotalTime);
 
-	return true;
+	if (bDownloadStarted && !EditorSubsystem->IsRequestingHighResolutionTextures(Character))
+	{
+		UE_LOG(LogTemp, Log, TEXT("Texture download completed in %.1f seconds"), TotalTime);
+		return true;
+	}
+	else if (!bDownloadStarted)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Texture download failed to start - likely due to authentication issues"));
+		UE_LOG(LogTemp, Warning, TEXT("  Please ensure you are logged into MetaHuman cloud services"));
+		UE_LOG(LogTemp, Warning, TEXT("  You can log in via: Window > MetaHuman > Cloud Services"));
+		return false;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Texture download did not complete within timeout"));
+		return false;
+	}
 }

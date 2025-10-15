@@ -187,6 +187,13 @@ private:
 	 */
 	static bool DownloadTextureSourceData(UMetaHumanCharacter* Character);
 
+private:
+	/**
+	 * 下载纹理源数据的实际实现函数
+	 * 线程安全的实现，处理后台线程调用
+	 */
+	static bool DownloadTextureSourceData_Impl(UMetaHumanCharacter* Character, UMetaHumanCharacterEditorSubsystem* EditorSubsystem);
+
 	/**
 	 * 步骤 5: 生成角色资产（网格、材质、纹理等）
 	 */

@@ -5,6 +5,8 @@
 #include "ToolMenus.h"
 #include "Widgets/Notifications/SNotificationList.h"
 #include "Framework/Notifications/NotificationManager.h"
+#include "Async/Async.h"
+#include "HAL/PlatformProcess.h"
 
 #define LOCTEXT_NAMESPACE "FMetaHumanParametricPluginModule"
 
@@ -122,62 +124,126 @@ void FMetaHumanParametricPluginModule::OnGenerateSlenderFemale()
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 1: Slender Female..."));
 
 	// 显示通知
-	FNotificationInfo Info(LOCTEXT("GeneratingSlenderFemale", "Generating Slender Female Character..."));
-	Info.ExpireDuration = 3.0f;
-	FSlateNotificationManager::Get().AddNotification(Info);
+	FNotificationInfo Info(LOCTEXT("GeneratingSlenderFemale", "Generating Slender Female Character... (Running in background)"));
+	Info.ExpireDuration = 10.0f;
+	Info.bUseThrobber = true;
+	Info.bUseSuccessFailIcons = true;
+	TSharedPtr<SNotificationItem> NotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
 
-	// 调用示例函数
-	Example1_CreateSlenderFemale();
+	// 在后台线程运行生成任务
+	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [NotificationPtr]()
+	{
+		// 运行示例函数
+		Example1_CreateSlenderFemale();
 
-	// 完成通知
-	FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete", "Character Generation Complete! Check Output Log."));
-	CompletedInfo.ExpireDuration = 5.0f;
-	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+		// 在游戏线程中显示完成通知
+		AsyncTask(ENamedThreads::GameThread, [NotificationPtr]()
+		{
+			FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete", "Slender Female Character Generation Complete! Check Output Log."));
+			CompletedInfo.ExpireDuration = 5.0f;
+			FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+
+			// 更新原始通知为成功状态
+			if (NotificationPtr.IsValid())
+			{
+				NotificationPtr->SetFadeOutDuration(1.0f);
+				NotificationPtr->ExpireAndFadeout();
+			}
+		});
+	});
 }
 
 void FMetaHumanParametricPluginModule::OnGenerateMuscularMale()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 2: Muscular Male..."));
 
-	FNotificationInfo Info(LOCTEXT("GeneratingMuscularMale", "Generating Muscular Male Character..."));
-	Info.ExpireDuration = 3.0f;
-	FSlateNotificationManager::Get().AddNotification(Info);
+	FNotificationInfo Info(LOCTEXT("GeneratingMuscularMale", "Generating Muscular Male Character... (Running in background)"));
+	Info.ExpireDuration = 10.0f;
+	Info.bUseThrobber = true;
+	Info.bUseSuccessFailIcons = true;
+	TSharedPtr<SNotificationItem> NotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
 
-	Example2_CreateMuscularMale();
+	// 在后台线程运行生成任务
+	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [NotificationPtr]()
+	{
+		Example2_CreateMuscularMale();
 
-	FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete2", "Character Generation Complete! Check Output Log."));
-	CompletedInfo.ExpireDuration = 5.0f;
-	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+		// 在游戏线程中显示完成通知
+		AsyncTask(ENamedThreads::GameThread, [NotificationPtr]()
+		{
+			FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete2", "Muscular Male Character Generation Complete! Check Output Log."));
+			CompletedInfo.ExpireDuration = 5.0f;
+			FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+
+			if (NotificationPtr.IsValid())
+			{
+				NotificationPtr->SetFadeOutDuration(1.0f);
+				NotificationPtr->ExpireAndFadeout();
+			}
+		});
+	});
 }
 
 void FMetaHumanParametricPluginModule::OnGenerateShortRounded()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 3: Short Rounded..."));
 
-	FNotificationInfo Info(LOCTEXT("GeneratingShortRounded", "Generating Short Rounded Character..."));
-	Info.ExpireDuration = 3.0f;
-	FSlateNotificationManager::Get().AddNotification(Info);
+	FNotificationInfo Info(LOCTEXT("GeneratingShortRounded", "Generating Short Rounded Character... (Running in background)"));
+	Info.ExpireDuration = 10.0f;
+	Info.bUseThrobber = true;
+	Info.bUseSuccessFailIcons = true;
+	TSharedPtr<SNotificationItem> NotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
 
-	Example3_CreateShortRoundedCharacter();
+	// 在后台线程运行生成任务
+	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [NotificationPtr]()
+	{
+		Example3_CreateShortRoundedCharacter();
 
-	FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete3", "Character Generation Complete! Check Output Log."));
-	CompletedInfo.ExpireDuration = 5.0f;
-	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+		// 在游戏线程中显示完成通知
+		AsyncTask(ENamedThreads::GameThread, [NotificationPtr]()
+		{
+			FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete3", "Short Rounded Character Generation Complete! Check Output Log."));
+			CompletedInfo.ExpireDuration = 5.0f;
+			FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+
+			if (NotificationPtr.IsValid())
+			{
+				NotificationPtr->SetFadeOutDuration(1.0f);
+				NotificationPtr->ExpireAndFadeout();
+			}
+		});
+	});
 }
 
 void FMetaHumanParametricPluginModule::OnBatchGenerate()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 4: Batch Generate..."));
 
-	FNotificationInfo Info(LOCTEXT("BatchGenerating", "Batch Generating 5 Characters... This may take a while."));
-	Info.ExpireDuration = 5.0f;
-	FSlateNotificationManager::Get().AddNotification(Info);
+	FNotificationInfo Info(LOCTEXT("BatchGenerating", "Batch Generating 5 Characters... (Running in background - This will take a while!)"));
+	Info.ExpireDuration = 30.0f; // 批量生成需要更长时间
+	Info.bUseThrobber = true;
+	Info.bUseSuccessFailIcons = true;
+	TSharedPtr<SNotificationItem> NotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
 
-	Example4_BatchCreateCharacters();
+	// 在后台线程运行生成任务
+	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [NotificationPtr]()
+	{
+		Example4_BatchCreateCharacters();
 
-	FNotificationInfo CompletedInfo(LOCTEXT("BatchComplete", "Batch Generation Complete! Check Output Log for results."));
-	CompletedInfo.ExpireDuration = 5.0f;
-	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+		// 在游戏线程中显示完成通知
+		AsyncTask(ENamedThreads::GameThread, [NotificationPtr]()
+		{
+			FNotificationInfo CompletedInfo(LOCTEXT("BatchComplete", "Batch Generation Complete! Check Output Log for results."));
+			CompletedInfo.ExpireDuration = 10.0f;
+			FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+
+			if (NotificationPtr.IsValid())
+			{
+				NotificationPtr->SetFadeOutDuration(2.0f);
+				NotificationPtr->ExpireAndFadeout();
+			}
+		});
+	});
 }
 
 void FMetaHumanParametricPluginModule::OnRunPluginTest()
