@@ -31,4 +31,9 @@ private:
 	static void OnGenerateShortRounded();
 	static void OnBatchGenerate();
 	static void OnRunPluginTest();
+
+	/** Authentication menu command callbacks */
+	static void OnCheckAuthentication();
+	static void OnLoginToCloudServices();
+	static void OnTestAuthentication();
 };

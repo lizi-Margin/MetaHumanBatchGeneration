@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "MetaHumanParametricPlugin.h"
+#include "MetaHumanParametricGenerator.h"
 #include "LevelEditor.h"
 #include "ToolMenus.h"
 #include "Widgets/Notifications/SNotificationList.h"
@@ -105,6 +106,46 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 		false,
 		FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Viewports")
 	);
+
+	// Add Authentication submenu
+	Section.AddSubMenu(
+		"MetaHumanAuthentication",
+		LOCTEXT("MetaHumanAuthenticationLabel", "Cloud Authentication"),
+		LOCTEXT("MetaHumanAuthenticationTooltip", "Test and debug MetaHuman cloud services authentication"),
+		FNewToolMenuDelegate::CreateLambda([](UToolMenu* SubMenu)
+		{
+			FToolMenuSection& AuthSection = SubMenu->AddSection("Authentication", LOCTEXT("Authentication", "Authentication Tools"));
+
+			// Check Authentication Status
+			AuthSection.AddMenuEntry(
+				"CheckAuth",
+				LOCTEXT("CheckAuthLabel", "Check Login Status"),
+				LOCTEXT("CheckAuthTooltip", "Check if currently logged into MetaHuman cloud services"),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnCheckAuthentication))
+			);
+
+			// Login to Cloud Services
+			AuthSection.AddMenuEntry(
+				"LoginAuth",
+				LOCTEXT("LoginAuthLabel", "Login to Cloud Services"),
+				LOCTEXT("LoginAuthTooltip", "Attempt to login to MetaHuman cloud services (may open browser)"),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnLoginToCloudServices))
+			);
+
+			// Test Full Authentication Flow
+			AuthSection.AddMenuEntry(
+				"TestAuth",
+				LOCTEXT("TestAuthLabel", "Test Full Authentication"),
+				LOCTEXT("TestAuthTooltip", "Run complete authentication test (check + login if needed)"),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnTestAuthentication))
+			);
+		}),
+		false,
+		FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Lock")
+	);
 }
 
 void FMetaHumanParametricPluginModule::OnGenerateSlenderFemale()
@@ -178,6 +219,119 @@ void FMetaHumanParametricPluginModule::OnRunPluginTest()
 	Example_PluginTest();
 
 	FNotificationInfo CompletedInfo(LOCTEXT("PluginTestComplete", "Plugin Test Complete! Check Output Log for results."));
+	CompletedInfo.ExpireDuration = 5.0f;
+	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+}
+
+// ============================================================================
+// Authentication Menu Command Callbacks
+// ============================================================================
+
+void FMetaHumanParametricPluginModule::OnCheckAuthentication()
+{
+	UE_LOG(LogTemp, Warning, TEXT("=== Checking MetaHuman Cloud Authentication Status ==="));
+
+	FNotificationInfo Info(LOCTEXT("CheckingAuth", "Checking MetaHuman Cloud Authentication..."));
+	Info.ExpireDuration = 2.0f;
+	FSlateNotificationManager::Get().AddNotification(Info);
+
+	// Use async check to avoid blocking the UI
+	UMetaHumanParametricGenerator::CheckCloudServicesLoginAsync([](bool bLoggedIn)
+	{
+		if (bLoggedIn)
+		{
+			UE_LOG(LogTemp, Log, TEXT("✓ User is logged in to MetaHuman cloud services"));
+			UE_LOG(LogTemp, Log, TEXT("  Cloud operations (AutoRig, texture download) are available"));
+
+			FNotificationInfo SuccessInfo(LOCTEXT("AuthCheckSuccess", "✓ Logged In - Cloud services available"));
+			SuccessInfo.ExpireDuration = 5.0f;
+			FSlateNotificationManager::Get().AddNotification(SuccessInfo);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("✗ User is NOT logged in to MetaHuman cloud services"));
+			UE_LOG(LogTemp, Warning, TEXT("  Please login via: Cloud Authentication > Login to Cloud Services"));
+
+			FNotificationInfo WarningInfo(LOCTEXT("AuthCheckFailed", "✗ Not Logged In - Use 'Login to Cloud Services' menu"));
+			WarningInfo.ExpireDuration = 7.0f;
+			FSlateNotificationManager::Get().AddNotification(WarningInfo);
+		}
+	});
+}
+
+void FMetaHumanParametricPluginModule::OnLoginToCloudServices()
+{
+	UE_LOG(LogTemp, Warning, TEXT("=== Attempting to Login to MetaHuman Cloud Services ==="));
+
+	FNotificationInfo Info(LOCTEXT("LoggingIn", "Logging into MetaHuman Cloud Services... (May open browser)"));
+	Info.ExpireDuration = 3.0f;
+	FSlateNotificationManager::Get().AddNotification(Info);
+
+	// First check if already logged in
+	UMetaHumanParametricGenerator::CheckCloudServicesLoginAsync([](bool bLoggedIn)
+	{
+		if (bLoggedIn)
+		{
+			UE_LOG(LogTemp, Log, TEXT("✓ Already logged in - no action needed"));
+
+			FNotificationInfo AlreadyLoggedInfo(LOCTEXT("AlreadyLoggedIn", "✓ Already Logged In - No action needed"));
+			AlreadyLoggedInfo.ExpireDuration = 5.0f;
+			FSlateNotificationManager::Get().AddNotification(AlreadyLoggedInfo);
+		}
+		else
+		{
+			// Not logged in, attempt login
+			UE_LOG(LogTemp, Log, TEXT("Not logged in - attempting login..."));
+			UE_LOG(LogTemp, Log, TEXT("  Note: A browser window may open for Epic Games login"));
+
+			FNotificationInfo LoginAttemptInfo(LOCTEXT("LoginAttempt", "Attempting login... Check browser if window opens"));
+			LoginAttemptInfo.ExpireDuration = 5.0f;
+			FSlateNotificationManager::Get().AddNotification(LoginAttemptInfo);
+
+			UMetaHumanParametricGenerator::LoginToCloudServicesAsync(
+				[]()
+				{
+					// Login succeeded
+					UE_LOG(LogTemp, Log, TEXT("✓ Successfully logged in to MetaHuman cloud services"));
+					UE_LOG(LogTemp, Log, TEXT("  Cloud operations are now available"));
+
+					FNotificationInfo SuccessInfo(LOCTEXT("LoginSuccess", "✓ Login Succeeded - Cloud services available"));
+					SuccessInfo.ExpireDuration = 5.0f;
+					FSlateNotificationManager::Get().AddNotification(SuccessInfo);
+				},
+				[]()
+				{
+					// Login failed
+					UE_LOG(LogTemp, Error, TEXT("✗ Failed to login to MetaHuman cloud services"));
+					UE_LOG(LogTemp, Error, TEXT("  Possible causes:"));
+					UE_LOG(LogTemp, Error, TEXT("  - Browser login window was not completed"));
+					UE_LOG(LogTemp, Error, TEXT("  - Network connectivity issues"));
+					UE_LOG(LogTemp, Error, TEXT("  - MetaHuman cloud services unavailable"));
+					UE_LOG(LogTemp, Error, TEXT("  - EOS (Epic Online Services) configuration missing"));
+
+					FNotificationInfo ErrorInfo(LOCTEXT("LoginFailed", "✗ Login Failed - Check Output Log for details"));
+					ErrorInfo.ExpireDuration = 7.0f;
+					FSlateNotificationManager::Get().AddNotification(ErrorInfo);
+				}
+			);
+		}
+	});
+}
+
+void FMetaHumanParametricPluginModule::OnTestAuthentication()
+{
+	UE_LOG(LogTemp, Warning, TEXT("=== Running Full MetaHuman Authentication Test ==="));
+
+	FNotificationInfo Info(LOCTEXT("TestingAuth", "Testing MetaHuman Authentication... Check Output Log"));
+	Info.ExpireDuration = 3.0f;
+	FSlateNotificationManager::Get().AddNotification(Info);
+
+	// Use the built-in test function
+	UMetaHumanParametricGenerator::TestCloudAuthentication();
+
+	// The TestCloudAuthentication function will handle its own logging and notifications
+	// via the async callbacks, so we just show a completion message
+	FNotificationInfo CompletedInfo(LOCTEXT("AuthTestStarted", "Authentication test started - watch Output Log for results"));
 	CompletedInfo.ExpireDuration = 5.0f;
 	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
 }

@@ -156,37 +156,6 @@ public:
 		const FString& BlueprintPath,
 		const FString& BlueprintName);
 
-private:
-	// ========== 内部辅助函数 ==========
-
-	/**
-	 * 步骤 1: 创建基础 MetaHuman Character 资产
-	 */
-	static UMetaHumanCharacter* CreateBaseCharacter(
-		const FString& PackagePath,
-		const FString& CharacterName,
-		EMetaHumanCharacterTemplateType TemplateType);
-
-	/**
-	 * 步骤 2: 配置身体参数（参数化系统）
-	 */
-	static bool ConfigureBodyParameters(
-		UMetaHumanCharacter* Character,
-		const FMetaHumanBodyParametricConfig& BodyConfig);
-
-	/**
-	 * 步骤 3: 配置外观（皮肤、眼睛、睫毛等）
-	 */
-	static bool ConfigureAppearance(
-		UMetaHumanCharacter* Character,
-		const FMetaHumanAppearanceConfig& AppearanceConfig);
-
-	/**
-	 * 步骤 4: 下载纹理源数据（新增）
-	 * 在生成资产前下载所需的纹理源数据，避免 "Texture generated for assembly without source data" 错误
-	 */
-	static bool DownloadTextureSourceData(UMetaHumanCharacter* Character);
-
 	// ============================================================================
 	// MetaHuman Cloud Services Authentication (新增)
 	// ============================================================================
@@ -221,6 +190,38 @@ private:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Debug")
 	static void TestCloudAuthentication();
+
+
+private:
+	// ========== 内部辅助函数 ==========
+
+	/**
+	 * 步骤 1: 创建基础 MetaHuman Character 资产
+	 */
+	static UMetaHumanCharacter* CreateBaseCharacter(
+		const FString& PackagePath,
+		const FString& CharacterName,
+		EMetaHumanCharacterTemplateType TemplateType);
+
+	/**
+	 * 步骤 2: 配置身体参数（参数化系统）
+	 */
+	static bool ConfigureBodyParameters(
+		UMetaHumanCharacter* Character,
+		const FMetaHumanBodyParametricConfig& BodyConfig);
+
+	/**
+	 * 步骤 3: 配置外观（皮肤、眼睛、睫毛等）
+	 */
+	static bool ConfigureAppearance(
+		UMetaHumanCharacter* Character,
+		const FMetaHumanAppearanceConfig& AppearanceConfig);
+
+	/**
+	 * 步骤 4: 下载纹理源数据（新增）
+	 * 在生成资产前下载所需的纹理源数据，避免 "Texture generated for assembly without source data" 错误
+	 */
+	static bool DownloadTextureSourceData(UMetaHumanCharacter* Character);
 
 private:
 	/**
