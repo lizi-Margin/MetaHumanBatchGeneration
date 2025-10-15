@@ -18,6 +18,9 @@
 #include "Engine/SimpleConstructionScript.h"
 #include "Engine/SCS_Node.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "HAL/PlatformProcess.h"
+#include "Tasks/Task.h"
+#include "Misc/DateTime.h"
 
 // ============================================================================
 // 主要生成函数
@@ -67,18 +70,27 @@ bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Step 3/5] ✓ Appearance configured"));
 
-	// 步骤 4: 生成资产
-	UE_LOG(LogTemp, Log, TEXT("[Step 4/5] Generating character assets..."));
+	// 步骤 4: 下载纹理源数据（新增）
+	UE_LOG(LogTemp, Log, TEXT("[Step 4/6] Downloading texture source data..."));
+	if (!DownloadTextureSourceData(Character))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Warning: Failed to download texture source data, will use default textures"));
+		// 不返回 false，继续使用默认纹理
+	}
+	UE_LOG(LogTemp, Log, TEXT("[Step 4/6] ✓ Texture source data download completed"));
+
+	// 步骤 5: 生成资产
+	UE_LOG(LogTemp, Log, TEXT("[Step 5/6] Generating character assets..."));
 	FMetaHumanCharacterGeneratedAssets GeneratedAssets;
 	if (!GenerateCharacterAssets(Character, GeneratedAssets))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to generate character assets!"));
 		return false;
 	}
-	UE_LOG(LogTemp, Log, TEXT("[Step 4/5] ✓ Assets generated: Face Mesh, Body Mesh, Textures, Physics"));
+	UE_LOG(LogTemp, Log, TEXT("[Step 5/6] ✓ Assets generated: Face Mesh, Body Mesh, Textures, Physics"));
 
-	// 步骤 5: 保存资产
-	UE_LOG(LogTemp, Log, TEXT("[Step 5/5] Saving character assets..."));
+	// 步骤 6: 保存资产
+	UE_LOG(LogTemp, Log, TEXT("[Step 6/6] Saving character assets..."));
 	if (!SaveCharacterAssets(Character, OutputPath, GeneratedAssets))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to save character assets!"));
@@ -582,4 +594,101 @@ TArray<FMetaHumanCharacterBodyConstraint> UMetaHumanParametricGenerator::Convert
 	}
 
 	return Constraints;
+}
+
+// ============================================================================
+// 新增：下载纹理源数据
+// ============================================================================
+
+bool UMetaHumanParametricGenerator::DownloadTextureSourceData(UMetaHumanCharacter* Character)
+{
+	if (!Character)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid character for texture download"));
+		return false;
+	}
+
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+	if (!EditorSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get editor subsystem for texture download"));
+		return false;
+	}
+
+	// 检查是否已经在下载纹理
+	if (EditorSubsystem->IsRequestingHighResolutionTextures(Character))
+	{
+		UE_LOG(LogTemp, Log, TEXT("Texture download already in progress, waiting..."));
+
+		// 等待下载完成（最多等待60秒）
+		const float MaxWaitTime = 60.0f;
+		const float StartTime = FPlatformTime::Seconds();
+
+		while (EditorSubsystem->IsRequestingHighResolutionTextures(Character))
+		{
+			const float ElapsedTime = FPlatformTime::Seconds() - StartTime;
+			if (ElapsedTime > MaxWaitTime)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Texture download timeout after %.1f seconds"), ElapsedTime);
+				return false;
+			}
+
+			// 处理编辑器 tick，让下载继续进行
+			FTaskGraphInterface::Get().ProcessThreadUntilIdle(ENamedThreads::GameThread);
+			FPlatformProcess::Sleep(0.1f);
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("Texture download completed"));
+		return true;
+	}
+
+	// 检查角色是否有合成纹理
+	if (!Character->HasSynthesizedTextures())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Character does not have synthesized textures, cannot download high-res textures"));
+		return false;
+	}
+
+	// 检查纹理合成是否启用
+	if (!EditorSubsystem->IsTextureSynthesisEnabled())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Texture synthesis is not enabled"));
+		return false;
+	}
+
+	// 请求 2k 分辨率纹理（如需更高分辨率，可改为 Res4k 或 Res8k）
+	UE_LOG(LogTemp, Log, TEXT("Requesting 2k texture download..."));
+	EditorSubsystem->RequestHighResolutionTextures(Character, ERequestTextureResolution::Res2k);
+
+	// 等待下载完成
+	const float MaxWaitTime = 120.0f; // 纹理下载可能需要更长时间
+	const float StartTime = FPlatformTime::Seconds();
+	float LastProgressReport = 0.0f;
+
+	while (EditorSubsystem->IsRequestingHighResolutionTextures(Character))
+	{
+		const float ElapsedTime = FPlatformTime::Seconds() - StartTime;
+
+		// 每10秒报告一次进度
+		if (ElapsedTime - LastProgressReport > 10.0f)
+		{
+			UE_LOG(LogTemp, Log, TEXT("Still downloading textures... (%.1f seconds elapsed)"), ElapsedTime);
+			LastProgressReport = ElapsedTime;
+		}
+
+		if (ElapsedTime > MaxWaitTime)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Texture download timeout after %.1f seconds"), ElapsedTime);
+			return false;
+		}
+
+		// 处理编辑器 tick
+		FTaskGraphInterface::Get().ProcessThreadUntilIdle(ENamedThreads::GameThread);
+		FPlatformProcess::Sleep(0.1f);
+	}
+
+	const float TotalTime = FPlatformTime::Seconds() - StartTime;
+	UE_LOG(LogTemp, Log, TEXT("Texture download completed in %.1f seconds"), TotalTime);
+
+	return true;
 }
