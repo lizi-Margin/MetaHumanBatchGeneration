@@ -17,4 +17,17 @@ public:
 	/** IModuleInterface implementation */
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
+
+private:
+	/** Register the toolbar menu extension */
+	void RegisterMenuExtensions();
+
+	/** Add toolbar menu entries - called by ToolMenus startup callback */
+	static void AddToolbarExtension();
+
+	/** Menu command callbacks - must be static for CreateStatic */
+	static void OnGenerateSlenderFemale();
+	static void OnGenerateMuscularMale();
+	static void OnGenerateShortRounded();
+	static void OnBatchGenerate();
 };
