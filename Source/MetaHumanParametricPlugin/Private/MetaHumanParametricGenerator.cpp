@@ -361,7 +361,7 @@ bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
 
 	if (OutAssets.PhysicsAsset)
 	{
-		UE_LOG(LogTemp, Log, TEXT("    • Physics Asset: %s"), *OutAssets.PhysicsAsset->GetName());
+		UE_LOG(LogTemp, Log, TEXT("    • Physics Asset: [Valid]"));
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("    • Body Measurements: %d"), OutAssets.BodyMeasurements.Num());

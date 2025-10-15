@@ -33,10 +33,13 @@ public class MetaHumanParametricPlugin : ModuleRules
 				"MetaHumanCharacterEditor",     // UMetaHumanCharacterEditorSubsystem
 				"MetaHumanCoreTechLib",         // FMetaHumanCharacterBodyIdentity
 				"MetaHumanSDKRuntime",          // EMetaHumanBodyType
-				"MetaHumanDefaultPipeline",     // FMetaHumanDefaultAssemblyOutput
+				"MetaHumanSDKEditor",           // MetaHuman SDK Editor
 
-				// 其他依赖
-				"RigLogic",                     // DNA 系统
+				// RigLogic 依赖
+				"RigLogicLib",                  // DNA 系统库
+				"RigLogicModule",               // DNA 模块
+
+				// UI 依赖
 				"Slate",
 				"SlateCore"
 			}
@@ -49,9 +52,7 @@ public class MetaHumanParametricPlugin : ModuleRules
 				"Projects",
 				"InputCore",
 				"ToolMenus",
-				"EditorStyle",
 				"EditorWidgets",
-				"UnrealEd",
 				"LevelEditor",
 
 				// 资产相关
@@ -69,9 +70,12 @@ public class MetaHumanParametricPlugin : ModuleRules
 				"AnimGraph",
 				"AnimGraphRuntime",
 
+				// MetaHuman 相关
+				"MetaHumanCharacterPalette",
+				"MetaHumanCharacterPaletteEditor",
+
 				// 其他
-				"PropertyEditor",
-				"DetailCustomizations"
+				"PropertyEditor"
 			}
 		);
 

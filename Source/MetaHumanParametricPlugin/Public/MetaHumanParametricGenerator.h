@@ -20,7 +20,6 @@
 #include "MetaHumanCharacterBodyIdentity.h"
 #include "MetaHumanBodyType.h"
 #include "MetaHumanCollection.h"
-#include "MetaHumanDefaultPipelineBase.h"
 
 // Unreal Engine Headers
 #include "Engine/SkeletalMesh.h"
