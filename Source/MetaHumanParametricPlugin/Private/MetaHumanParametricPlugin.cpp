@@ -7,6 +7,8 @@
 #include "Framework/Notifications/NotificationManager.h"
 #include "Async/Async.h"
 #include "HAL/PlatformProcess.h"
+#include "Engine/Engine.h"
+#include "Engine/World.h"
 
 #define LOCTEXT_NAMESPACE "FMetaHumanParametricPluginModule"
 
@@ -46,7 +48,6 @@ void FMetaHumanParametricPluginModule::RegisterMenuExtensions()
 void FMetaHumanParametricPluginModule::AddToolbarExtension()
 {
 	UE_LOG(LogTemp, Warning, TEXT("AddToolbarExtension called"));
-	// 获取 Level Editor 工具栏菜单
 	UToolMenu* Menu = UToolMenus::Get()->ExtendMenu("LevelEditor.LevelEditorToolBar.User");
 	if (!Menu)
 	{
@@ -54,11 +55,9 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 		return;
 	}
 
-	// 添加一个新的 Section
 	FToolMenuSection& Section = Menu->FindOrAddSection("MetaHumanGenerator");
 	Section.Label = LOCTEXT("MetaHumanGenerator", "MetaHuman Generator");
 
-	// 添加下拉菜单
 	Section.AddSubMenu(
 		"MetaHumanExamples",
 		LOCTEXT("MetaHumanExamplesLabel", "MetaHuman Examples"),
@@ -78,7 +77,6 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 
 			SubSection.AddSeparator("TestSeparator");
 
-			// 示例 1: 苗条女性
 			FToolMenuEntry& Entry1 = SubSection.AddMenuEntry(
 				"SlenderFemale",
 				LOCTEXT("SlenderFemaleLabel", "1. Slender Female"),
@@ -87,7 +85,6 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnGenerateSlenderFemale))
 			);
 
-			// 示例 2: 强壮男性
 			FToolMenuEntry& Entry2 = SubSection.AddMenuEntry(
 				"MuscularMale",
 				LOCTEXT("MuscularMaleLabel", "2. Muscular Male"),
@@ -96,7 +93,6 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnGenerateMuscularMale))
 			);
 
-			// 示例 3: 矮小圆润
 			FToolMenuEntry& Entry3 = SubSection.AddMenuEntry(
 				"ShortRounded",
 				LOCTEXT("ShortRoundedLabel", "3. Short Rounded"),
@@ -105,7 +101,6 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnGenerateShortRounded))
 			);
 
-			// 示例 4: 批量生成
 			FToolMenuEntry& Entry4 = SubSection.AddMenuEntry(
 				"BatchGenerate",
 				LOCTEXT("BatchGenerateLabel", "4. Batch Generate (5 Characters)"),
@@ -124,126 +119,52 @@ void FMetaHumanParametricPluginModule::OnGenerateSlenderFemale()
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 1: Slender Female..."));
 
 	// 显示通知
-	FNotificationInfo Info(LOCTEXT("GeneratingSlenderFemale", "Generating Slender Female Character... (Running in background)"));
-	Info.ExpireDuration = 10.0f;
+	FNotificationInfo Info(LOCTEXT("GeneratingSlenderFemale", "Generating Slender Female Character... (This will take a few minutes)"));
+	Info.ExpireDuration = 30.0f; // 更长的显示时间，因为生成需要时间
 	Info.bUseThrobber = true;
 	Info.bUseSuccessFailIcons = true;
 	TSharedPtr<SNotificationItem> NotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
 
-	// 在后台线程运行生成任务
-	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [NotificationPtr]()
-	{
-		// 运行示例函数
-		Example1_CreateSlenderFemale();
-
-		// 在游戏线程中显示完成通知
-		AsyncTask(ENamedThreads::GameThread, [NotificationPtr]()
-		{
-			FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete", "Slender Female Character Generation Complete! Check Output Log."));
-			CompletedInfo.ExpireDuration = 5.0f;
-			FSlateNotificationManager::Get().AddNotification(CompletedInfo);
-
-			// 更新原始通知为成功状态
-			if (NotificationPtr.IsValid())
-			{
-				NotificationPtr->SetFadeOutDuration(1.0f);
-				NotificationPtr->ExpireAndFadeout();
-			}
-		});
-	});
+    Example1_CreateSlenderFemale();
 }
 
 void FMetaHumanParametricPluginModule::OnGenerateMuscularMale()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 2: Muscular Male..."));
 
-	FNotificationInfo Info(LOCTEXT("GeneratingMuscularMale", "Generating Muscular Male Character... (Running in background)"));
-	Info.ExpireDuration = 10.0f;
+	FNotificationInfo Info(LOCTEXT("GeneratingMuscularMale", "Generating Muscular Male Character... (This will take a few minutes)"));
+	Info.ExpireDuration = 30.0f;
 	Info.bUseThrobber = true;
 	Info.bUseSuccessFailIcons = true;
 	TSharedPtr<SNotificationItem> NotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
 
-	// 在后台线程运行生成任务
-	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [NotificationPtr]()
-	{
-		Example2_CreateMuscularMale();
-
-		// 在游戏线程中显示完成通知
-		AsyncTask(ENamedThreads::GameThread, [NotificationPtr]()
-		{
-			FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete2", "Muscular Male Character Generation Complete! Check Output Log."));
-			CompletedInfo.ExpireDuration = 5.0f;
-			FSlateNotificationManager::Get().AddNotification(CompletedInfo);
-
-			if (NotificationPtr.IsValid())
-			{
-				NotificationPtr->SetFadeOutDuration(1.0f);
-				NotificationPtr->ExpireAndFadeout();
-			}
-		});
-	});
+    Example2_CreateMuscularMale();
 }
 
 void FMetaHumanParametricPluginModule::OnGenerateShortRounded()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 3: Short Rounded..."));
 
-	FNotificationInfo Info(LOCTEXT("GeneratingShortRounded", "Generating Short Rounded Character... (Running in background)"));
-	Info.ExpireDuration = 10.0f;
+	FNotificationInfo Info(LOCTEXT("GeneratingShortRounded", "Generating Short Rounded Character... (This will take a few minutes)"));
+	Info.ExpireDuration = 30.0f;
 	Info.bUseThrobber = true;
 	Info.bUseSuccessFailIcons = true;
 	TSharedPtr<SNotificationItem> NotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
 
-	// 在后台线程运行生成任务
-	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [NotificationPtr]()
-	{
-		Example3_CreateShortRoundedCharacter();
-
-		// 在游戏线程中显示完成通知
-		AsyncTask(ENamedThreads::GameThread, [NotificationPtr]()
-		{
-			FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete3", "Short Rounded Character Generation Complete! Check Output Log."));
-			CompletedInfo.ExpireDuration = 5.0f;
-			FSlateNotificationManager::Get().AddNotification(CompletedInfo);
-
-			if (NotificationPtr.IsValid())
-			{
-				NotificationPtr->SetFadeOutDuration(1.0f);
-				NotificationPtr->ExpireAndFadeout();
-			}
-		});
-	});
+	Example3_CreateShortRoundedCharacter();
 }
 
 void FMetaHumanParametricPluginModule::OnBatchGenerate()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 4: Batch Generate..."));
 
-	FNotificationInfo Info(LOCTEXT("BatchGenerating", "Batch Generating 5 Characters... (Running in background - This will take a while!)"));
-	Info.ExpireDuration = 30.0f; // 批量生成需要更长时间
+	FNotificationInfo Info(LOCTEXT("BatchGenerating", "Batch Generating 5 Characters... (This will take several minutes!)"));
+	Info.ExpireDuration = 60.0f;
 	Info.bUseThrobber = true;
 	Info.bUseSuccessFailIcons = true;
 	TSharedPtr<SNotificationItem> NotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
 
-	// 在后台线程运行生成任务
-	AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask, [NotificationPtr]()
-	{
-		Example4_BatchCreateCharacters();
-
-		// 在游戏线程中显示完成通知
-		AsyncTask(ENamedThreads::GameThread, [NotificationPtr]()
-		{
-			FNotificationInfo CompletedInfo(LOCTEXT("BatchComplete", "Batch Generation Complete! Check Output Log for results."));
-			CompletedInfo.ExpireDuration = 10.0f;
-			FSlateNotificationManager::Get().AddNotification(CompletedInfo);
-
-			if (NotificationPtr.IsValid())
-			{
-				NotificationPtr->SetFadeOutDuration(2.0f);
-				NotificationPtr->ExpireAndFadeout();
-			}
-		});
-	});
+ 	Example4_BatchCreateCharacters();
 }
 
 void FMetaHumanParametricPluginModule::OnRunPluginTest()
@@ -260,7 +181,3 @@ void FMetaHumanParametricPluginModule::OnRunPluginTest()
 	CompletedInfo.ExpireDuration = 5.0f;
 	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
 }
-
-#undef LOCTEXT_NAMESPACE
-
-IMPLEMENT_MODULE(FMetaHumanParametricPluginModule, MetaHumanParametricPlugin)

@@ -5,6 +5,17 @@
 #include "CoreMinimal.h"
 #include "Modules/ModuleManager.h"
 
+class SNotificationItem;
+
+/** Character generation types */
+enum class ECharacterType
+{
+	SlenderFemale,
+	MuscularMale,
+	ShortRounded,
+	Batch
+};
+
 /**
  * MetaHuman Parametric Plugin Module
  *
@@ -31,4 +42,14 @@ private:
 	static void OnGenerateShortRounded();
 	static void OnBatchGenerate();
 	static void OnRunPluginTest();
+
+private:
+	/** Start asynchronous character generation */
+	static void StartAsyncCharacterGeneration(TSharedPtr<SNotificationItem> Notification, ECharacterType Type);
+
+	/** Execute character generation on game thread */
+	static void ExecuteCharacterGeneration(ECharacterType Type);
+
+	/** Static function for processing pending async tasks */
+	static void ProcessPendingTasks();
 };
