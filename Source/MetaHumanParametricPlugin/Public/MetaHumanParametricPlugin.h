@@ -30,4 +30,5 @@ private:
 	static void OnGenerateMuscularMale();
 	static void OnGenerateShortRounded();
 	static void OnBatchGenerate();
+	static void OnRunPluginTest();
 };

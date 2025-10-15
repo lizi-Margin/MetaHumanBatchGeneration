@@ -13,6 +13,7 @@ extern void Example1_CreateSlenderFemale();
 extern void Example2_CreateMuscularMale();
 extern void Example3_CreateShortRoundedCharacter();
 extern void Example4_BatchCreateCharacters();
+extern void Example_PluginTest();
 
 void FMetaHumanParametricPluginModule::StartupModule()
 {
@@ -42,10 +43,12 @@ void FMetaHumanParametricPluginModule::RegisterMenuExtensions()
 
 void FMetaHumanParametricPluginModule::AddToolbarExtension()
 {
+	UE_LOG(LogTemp, Warning, TEXT("AddToolbarExtension called"));
 	// 获取 Level Editor 工具栏菜单
 	UToolMenu* Menu = UToolMenus::Get()->ExtendMenu("LevelEditor.LevelEditorToolBar.User");
 	if (!Menu)
 	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to extend LevelEditor.LevelEditorToolBar.User menu"));
 		return;
 	}
 
@@ -61,6 +64,17 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 		FNewToolMenuDelegate::CreateLambda([](UToolMenu* SubMenu)
 		{
 			FToolMenuSection& SubSection = SubMenu->AddSection("Examples", LOCTEXT("Examples", "Character Examples"));
+
+			// TEST: Plugin basics test
+			FToolMenuEntry& EntryTest = SubSection.AddMenuEntry(
+				"PluginTest",
+				LOCTEXT("PluginTestLabel", "0. Run Plugin Test (Safe)"),
+				LOCTEXT("PluginTestTooltip", "Test plugin functionality without MetaHuman dependencies"),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnRunPluginTest))
+			);
+
+			SubSection.AddSeparator("TestSeparator");
 
 			// 示例 1: 苗条女性
 			FToolMenuEntry& Entry1 = SubSection.AddMenuEntry(
@@ -162,6 +176,21 @@ void FMetaHumanParametricPluginModule::OnBatchGenerate()
 	Example4_BatchCreateCharacters();
 
 	FNotificationInfo CompletedInfo(LOCTEXT("BatchComplete", "Batch Generation Complete! Check Output Log for results."));
+	CompletedInfo.ExpireDuration = 5.0f;
+	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+}
+
+void FMetaHumanParametricPluginModule::OnRunPluginTest()
+{
+	UE_LOG(LogTemp, Warning, TEXT("Starting Plugin Test..."));
+
+	FNotificationInfo Info(LOCTEXT("RunningPluginTest", "Running Plugin Test (Safe - No MetaHuman Dependencies)"));
+	Info.ExpireDuration = 3.0f;
+	FSlateNotificationManager::Get().AddNotification(Info);
+
+	Example_PluginTest();
+
+	FNotificationInfo CompletedInfo(LOCTEXT("PluginTestComplete", "Plugin Test Complete! Check Output Log for results."));
 	CompletedInfo.ExpireDuration = 5.0f;
 	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
 }
