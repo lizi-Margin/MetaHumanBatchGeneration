@@ -39,6 +39,10 @@ public class MetaHumanParametricPlugin : ModuleRules
 				"RigLogicLib",                  // DNA 系统库
 				"RigLogicModule",               // DNA 模块
 
+				// 图像处理依赖
+				"ImageCore",
+				"ImageWrapper",
+
 				// UI 依赖
 				"Slate",
 				"SlateCore"

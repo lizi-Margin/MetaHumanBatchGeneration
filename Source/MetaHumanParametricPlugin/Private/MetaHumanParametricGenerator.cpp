@@ -10,6 +10,13 @@
 #include "MetaHumanCharacterBodyIdentity.h"
 #include "MetaHumanCollection.h"
 #include "MetaHumanBodyType.h"
+#include "MetaHumanCharacterEditorModule.h"
+#include "Engine/Engine.h"
+#include "ImageUtils.h"
+#include "ImageCoreUtils.h"
+#include "PixelFormat.h"
+#include "Engine/Texture2D.h"
+#include "Engine/Texture.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/SavePackage.h"
@@ -305,7 +312,6 @@ bool UMetaHumanParametricGenerator::ConfigureAppearance(
 }
 
 // ============================================================================
-// 步骤 4: 生成角色资产
 // ============================================================================
 
 bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
@@ -323,6 +329,12 @@ bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
 		return false;
 	}
 
+	// 检查是否已经有高分辨率纹理，如果没有建议先下载（通过GUI或 programmatically）
+	if (!Character->HasHighResolutionTextures())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("This character does not have high-resolution textures. For best quality, download textures via the MetaHuman Editor GUI first."));
+	}
+
 	// 创建用于存放生成资产的临时包
 	UPackage* TransientPackage = GetTransientPackage();
 
@@ -336,8 +348,38 @@ bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
 	if (!EditorSubsystem->TryGenerateCharacterAssets(Character, TransientPackage, OutAssets))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to generate character assets"));
-		return false;
+		
+		// 检查是否有高分辨率纹理问题
+		FText ErrorMessage;
+		if (!EditorSubsystem->CanBuildMetaHuman(Character, ErrorMessage))
+		{
+			UE_LOG(LogTemp, Error, TEXT("Cannot build MetaHuman: %s"), *ErrorMessage.ToString());
+			
+			// 如果缺少高分辨率纹理，尝试使用合成纹理生成
+			if (ErrorMessage.ToString().Contains(TEXT("missing textures")))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("High-resolution textures missing. Attempting to ensure synthesized textures have source data..."));
+				
+				// 确保合成纹理有源数据，即使没有下载高分辨率纹理
+				// EditorSubsystem->StoreSynthesizedTextures(Character); // This is private, so skip it
+				EditorSubsystem->ApplySkinSettings(Character, Character->SkinSettings);
+				
+				// 再次尝试生成资产
+				if (!EditorSubsystem->TryGenerateCharacterAssets(Character, TransientPackage, OutAssets))
+				{
+					UE_LOG(LogTemp, Error, TEXT("Failed to generate character assets even after ensuring synthesized textures"));
+					return false;
+				}
+			}
+		}
+		else
+		{
+			return false;
+		}
 	}
+
+	// 确保所有纹理都有源数据以避免后续错误
+	EnsureTextureSourceData(Character, OutAssets);
 
 	// 验证生成的资产
 	if (!OutAssets.FaceMesh)
@@ -559,6 +601,152 @@ UBlueprint* UMetaHumanParametricGenerator::CreateBlueprintFromCharacter(
 
 // ============================================================================
 // 辅助函数：将测量值转换为约束
+// ============================================================================
+
+bool UMetaHumanParametricGenerator::DownloadHighResolutionTextures(
+	UMetaHumanCharacter* Character,
+	int32 Resolution)
+{
+	if (!Character || !GEditor)
+	{
+		return false;
+	}
+
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+	if (!EditorSubsystem)
+	{
+		return false;
+	}
+
+	// 检查是否已经有高分辨率纹理
+	if (Character->HasHighResolutionTextures())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Character already has high-resolution textures"));
+		return true;
+	}
+
+	// 确保合成纹理和皮肤设置已应用
+	// EditorSubsystem->StoreSynthesizedTextures(Character); // This is private, so skip it
+	EditorSubsystem->ApplySkinSettings(Character, Character->SkinSettings);
+
+	// 将整数分辨率转换为枚举值
+	ERequestTextureResolution RequestResolution;
+	if (Resolution <= 2048)
+	{
+		RequestResolution = ERequestTextureResolution::Res2k;
+	}
+	else if (Resolution <= 4096)
+	{
+		RequestResolution = ERequestTextureResolution::Res4k;
+	}
+	else
+	{
+		RequestResolution = ERequestTextureResolution::Res8k;
+	}
+
+	// 请求下载指定分辨率的高分辨率纹理
+	EditorSubsystem->RequestHighResolutionTextures(Character, RequestResolution);
+
+	UE_LOG(LogTemp, Log, TEXT("High-resolution texture download request initiated at resolution: %d"), Resolution);
+
+	return true;
+}
+
+// ============================================================================
+
+bool UMetaHumanParametricGenerator::EnsureTextureSourceData(
+	UMetaHumanCharacter* Character,
+	FMetaHumanCharacterGeneratedAssets& Assets)
+{
+	if (!Character || !GEditor)
+	{
+		return false;
+	}
+
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+	if (!EditorSubsystem)
+	{
+		return false;
+	}
+
+	// 确保生成的纹理具有源数据以避免错误
+	bool bAllTexturesHaveSource = true;
+
+	// 检查并修复面部纹理
+	for (auto& Pair : Assets.SynthesizedFaceTextures)
+	{
+		if (Pair.Value && !Pair.Value->Source.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Initializing source data for face texture type: %s"), *UEnum::GetValueAsString(Pair.Key));
+			
+			// 尝试从角色中获取纹理数据并初始化源
+			if (const FMetaHumanCharacterTextureInfo* TextureInfo = Character->SynthesizedFaceTexturesInfo.Find(Pair.Key))
+			{
+				// 获取纹理数据
+				const TFuture<FSharedBuffer>& TextureDataFuture = Character->GetSynthesizedFaceTextureDataAsync(Pair.Key);
+				TextureDataFuture.Wait();
+				
+				if (!TextureDataFuture.Get().IsNull())
+				{
+					// 初始化纹理源数据
+					Pair.Value->Source.Init(FImageView(
+						const_cast<void*>(TextureDataFuture.Get().GetData()),
+						Pair.Value->GetSizeX(),
+						Pair.Value->GetSizeY(),
+						FImageCoreUtils::GetRawImageFormatForPixelFormat(Pair.Value->GetPixelFormat())
+					));
+				}
+			}
+			else
+			{
+				// 如果没有纹理信息，跳过源数据初始化
+				// 在实际使用中，纹理源数据应由MetaHuman系统提供
+				// 我们只是在确保其他纹理有源数据时不导致错误
+			}
+		}
+		
+		if (Pair.Value && !Pair.Value->Source.IsValid())
+		{
+			bAllTexturesHaveSource = false;
+		}
+	}
+
+	// 检查并修复身体纹理
+	for (auto& Pair : Assets.BodyTextures)
+	{
+		if (Pair.Value && !Pair.Value->Source.IsValid())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Initializing source data for body texture type: %s"), *UEnum::GetValueAsString(Pair.Key));
+			
+			// 检查是否有高分辨率纹理信息
+			if (const FMetaHumanCharacterTextureInfo* TextureInfo = Character->HighResBodyTexturesInfo.Find(Pair.Key))
+			{
+				// 获取纹理数据
+				const TFuture<FSharedBuffer>& PayloadData = Character->GetHighResBodyTextureDataAsync(Pair.Key);
+				PayloadData.Wait();
+				
+				if (!PayloadData.Get().IsNull())
+				{
+					// 初始化纹理源数据
+					Pair.Value->Source.Init(FImageView(
+						const_cast<void*>(PayloadData.Get().GetData()),
+						Pair.Value->GetSizeX(),
+						Pair.Value->GetSizeY(),
+						FImageCoreUtils::GetRawImageFormatForPixelFormat(Pair.Value->GetPixelFormat())
+					));
+				}
+			}
+		}
+		
+		if (Pair.Value && !Pair.Value->Source.IsValid())
+		{
+			bAllTexturesHaveSource = false;
+		}
+	}
+
+	return bAllTexturesHaveSource;
+}
+
 // ============================================================================
 
 TArray<FMetaHumanCharacterBodyConstraint> UMetaHumanParametricGenerator::ConvertMeasurementsToConstraints(

@@ -210,4 +210,19 @@ private:
 		const FMetaHumanCharacterGeneratedAssets& Assets,
 		const FString& PackagePath,
 		const FString& BlueprintName);
+
+	/**
+	 * 辅助：下载高分辨率纹理 (2K/4K/8K)
+	 * 对应GUI中的 "Download Texture Source" 功能
+	 */
+	static bool DownloadHighResolutionTextures(
+		UMetaHumanCharacter* Character,
+		int32 Resolution = 2048);  // 2048 = 2K, 4096 = 4K, 8192 = 8K
+
+	/**
+	 * 辅助：确保生成的纹理具有源数据，避免资产生成错误
+	 */
+	static bool EnsureTextureSourceData(
+		UMetaHumanCharacter* Character,
+		FMetaHumanCharacterGeneratedAssets& Assets);
 };
