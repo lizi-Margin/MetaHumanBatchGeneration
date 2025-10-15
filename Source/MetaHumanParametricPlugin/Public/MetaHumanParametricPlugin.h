@@ -7,19 +7,8 @@
 
 class SNotificationItem;
 
-/** Character generation types */
-enum class ECharacterType
-{
-	SlenderFemale,
-	MuscularMale,
-	ShortRounded,
-	Batch
-};
-
 /**
  * MetaHuman Parametric Plugin Module
- *
- * 提供程序化创建和定制 MetaHuman 角色的 C++ API
  */
 class FMetaHumanParametricPluginModule : public IModuleInterface
 {
@@ -42,14 +31,4 @@ private:
 	static void OnGenerateShortRounded();
 	static void OnBatchGenerate();
 	static void OnRunPluginTest();
-
-private:
-	/** Start asynchronous character generation */
-	static void StartAsyncCharacterGeneration(TSharedPtr<SNotificationItem> Notification, ECharacterType Type);
-
-	/** Execute character generation on game thread */
-	static void ExecuteCharacterGeneration(ECharacterType Type);
-
-	/** Static function for processing pending async tasks */
-	static void ProcessPendingTasks();
 };

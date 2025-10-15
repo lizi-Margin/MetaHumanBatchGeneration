@@ -1,7 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 // MetaHuman Parametric Generator - Implementation
 //
-// 完整的参数化 MetaHuman 角色生成流程实现
+// Complete parametric MetaHuman character generation workflow implementation
 
 #include "MetaHumanParametricGenerator.h"
 
@@ -24,7 +24,7 @@
 #include "Cloud/MetaHumanARServiceRequest.h"
 
 // ============================================================================
-// 主要生成函数
+// Main Generation Function
 // ============================================================================
 
 bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
@@ -38,7 +38,7 @@ bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
 	UE_LOG(LogTemp, Log, TEXT("Character Name: %s"), *CharacterName);
 	UE_LOG(LogTemp, Log, TEXT("Output Path: %s"), *OutputPath);
 
-	// 步骤 1: 创建基础 Character 资产
+	// Step 1: Create base Character asset
 	UE_LOG(LogTemp, Log, TEXT("[Step 1/5] Creating base MetaHuman Character asset..."));
 	UMetaHumanCharacter* Character = CreateBaseCharacter(
 		OutputPath,
@@ -53,7 +53,7 @@ bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Step 1/5] ✓ Base character created"));
 
-	// 步骤 2: 配置身体参数
+	// Step 2: Configure body parameters
 	UE_LOG(LogTemp, Log, TEXT("[Step 2/5] Configuring body parameters..."));
 	if (!ConfigureBodyParameters(Character, BodyConfig))
 	{
@@ -62,7 +62,7 @@ bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Step 2/5] ✓ Body parameters configured"));
 
-	// 步骤 3: 配置外观
+	// Step 3: Configure appearance
 	UE_LOG(LogTemp, Log, TEXT("[Step 3/5] Configuring appearance..."));
 	if (!ConfigureAppearance(Character, AppearanceConfig))
 	{
@@ -71,16 +71,16 @@ bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Step 3/5] ✓ Appearance configured"));
 
-	// 步骤 4: 下载纹理源数据（新增）
+	// Step 4: Download texture source data (new)
 	UE_LOG(LogTemp, Log, TEXT("[Step 4/6] Downloading texture source data..."));
 	if (!DownloadTextureSourceData(Character))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Warning: Failed to download texture source data, will use default textures"));
-		// 不返回 false，继续使用默认纹理
+		// Don't return false, continue with default textures
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Step 4/6] ✓ Texture source data download completed"));
 
-	// 步骤 5: 生成资产
+	// Step 5: Generate assets
 	UE_LOG(LogTemp, Log, TEXT("[Step 5/6] Generating character assets..."));
 	FMetaHumanCharacterGeneratedAssets GeneratedAssets;
 	if (!GenerateCharacterAssets(Character, GeneratedAssets))
@@ -90,7 +90,7 @@ bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Step 5/6] ✓ Assets generated: Face Mesh, Body Mesh, Textures, Physics"));
 
-	// 步骤 6: 保存资产
+	// Step 6: Save assets
 	UE_LOG(LogTemp, Log, TEXT("[Step 6/6] Saving character assets..."));
 	if (!SaveCharacterAssets(Character, OutputPath, GeneratedAssets))
 	{
@@ -105,7 +105,7 @@ bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
 }
 
 // ============================================================================
-// 步骤 1: 创建基础角色资产
+// Step 1: Create Base Character Asset
 // ============================================================================
 
 UMetaHumanCharacter* UMetaHumanParametricGenerator::CreateBaseCharacter(
@@ -113,7 +113,7 @@ UMetaHumanCharacter* UMetaHumanParametricGenerator::CreateBaseCharacter(
 	const FString& CharacterName,
 	EMetaHumanCharacterTemplateType TemplateType)
 {
-	// 1. 构建完整的包路径
+	// 1. Build complete package path
 	FString PackageNameStr = FPackageName::ObjectPathToPackageName(PackagePath / CharacterName);
 	UPackage* Package = CreatePackage(*PackageNameStr);
 
@@ -123,7 +123,7 @@ UMetaHumanCharacter* UMetaHumanParametricGenerator::CreateBaseCharacter(
 		return nullptr;
 	}
 
-	// 2. 创建 MetaHumanCharacter 对象
+	// 2. Create MetaHumanCharacter object
 	UMetaHumanCharacter* Character = NewObject<UMetaHumanCharacter>(
 		Package,
 		UMetaHumanCharacter::StaticClass(),
@@ -137,16 +137,16 @@ UMetaHumanCharacter* UMetaHumanParametricGenerator::CreateBaseCharacter(
 		return nullptr;
 	}
 
-	// 3. 设置模板类型
+	// 3. Set template type
 	Character->TemplateType = TemplateType;
 
-	// 4. 初始化角色（加载必要的模型和数据）
+	// 4. Initialize character (load necessary models and data)
 	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
 	if (EditorSubsystem)
 	{
 		EditorSubsystem->InitializeMetaHumanCharacter(Character);
 
-		// 注册角色以便编辑
+		// Register character for editing
 		if (!EditorSubsystem->TryAddObjectToEdit(Character))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Failed to register character for editing, but continuing..."));
@@ -158,14 +158,14 @@ UMetaHumanCharacter* UMetaHumanParametricGenerator::CreateBaseCharacter(
 		return nullptr;
 	}
 
-	// 5. 标记包为脏状态（需要保存）
+	// 5. Mark package as dirty (needs saving)
 	Package->MarkPackageDirty();
 
 	return Character;
 }
 
 // ============================================================================
-// 步骤 2: 配置身体参数（核心！）
+// Step 2: Configure Body Parameters (Core!)
 // ============================================================================
 
 bool UMetaHumanParametricGenerator::ConfigureBodyParameters(
@@ -184,7 +184,7 @@ bool UMetaHumanParametricGenerator::ConfigureBodyParameters(
 		return false;
 	}
 
-	// 1. 设置身体类型（固定 vs 参数化）
+	// 1. Set body type (fixed vs parametric)
 	UE_LOG(LogTemp, Log, TEXT("  - Setting body type: %s"),
 		*UEnum::GetValueAsString(BodyConfig.BodyType));
 
@@ -194,24 +194,24 @@ bool UMetaHumanParametricGenerator::ConfigureBodyParameters(
 		UMetaHumanCharacterEditorSubsystem::EBodyMeshUpdateMode::Full
 	);
 
-	// 2. 设置全局变形强度
+	// 2. Set global deformation strength
 	UE_LOG(LogTemp, Log, TEXT("  - Setting global delta scale: %.2f"), BodyConfig.GlobalDeltaScale);
 	EditorSubsystem->SetBodyGlobalDeltaScale(Character, BodyConfig.GlobalDeltaScale);
 
-	// 3. 如果使用参数化身体，应用身体约束
+	// 3. If using parametric body, apply body constraints
 	if (BodyConfig.bUseParametricBody && BodyConfig.BodyMeasurements.Num() > 0)
 	{
 		UE_LOG(LogTemp, Log, TEXT("  - Applying parametric body constraints (%d measurements)..."),
 			BodyConfig.BodyMeasurements.Num());
 
-		// 转换测量值为约束数组
+		// Convert measurements to constraints array
 		TArray<FMetaHumanCharacterBodyConstraint> Constraints =
 			ConvertMeasurementsToConstraints(BodyConfig.BodyMeasurements);
 
-		// 应用约束到角色
+		// Apply constraints to character
 		EditorSubsystem->SetBodyConstraints(Character, Constraints);
 
-		// 打印每个约束的值
+		// Print each constraint value
 		for (const auto& Pair : BodyConfig.BodyMeasurements)
 		{
 			UE_LOG(LogTemp, Log, TEXT("    • %s: %.2f cm"), *Pair.Key, Pair.Value);
@@ -222,7 +222,7 @@ bool UMetaHumanParametricGenerator::ConfigureBodyParameters(
 		UE_LOG(LogTemp, Log, TEXT("  - Using fixed body type (no parametric constraints)"));
 	}
 
-	// 4. 获取当前身体状态并提交更改
+	// 4. Get current body state and commit changes
 	TSharedRef<FMetaHumanCharacterBodyIdentity::FState> BodyState =
 		EditorSubsystem->CopyBodyState(Character);
 
@@ -237,7 +237,7 @@ bool UMetaHumanParametricGenerator::ConfigureBodyParameters(
 }
 
 // ============================================================================
-// 步骤 3: 配置外观（皮肤、眼睛、睫毛等）
+// Step 3: Configure Appearance (Skin, Eyes, Eyelashes, etc.)
 // ============================================================================
 
 bool UMetaHumanParametricGenerator::ConfigureAppearance(
@@ -255,7 +255,7 @@ bool UMetaHumanParametricGenerator::ConfigureAppearance(
 		return false;
 	}
 
-	// 1. 配置皮肤设置
+	// 1. Configure skin settings
 	UE_LOG(LogTemp, Log, TEXT("  - Configuring skin settings..."));
 	{
 		FMetaHumanCharacterSkinSettings SkinSettings;
@@ -263,7 +263,7 @@ bool UMetaHumanParametricGenerator::ConfigureAppearance(
 		SkinSettings.Skin.V = AppearanceConfig.SkinToneV;
 		SkinSettings.Skin.Roughness = AppearanceConfig.SkinRoughness;
 
-		// 应用并提交皮肤设置
+		// Apply and commit skin settings
 		EditorSubsystem->ApplySkinSettings(Character, SkinSettings);
 		EditorSubsystem->CommitSkinSettings(Character, SkinSettings);
 
@@ -272,12 +272,12 @@ bool UMetaHumanParametricGenerator::ConfigureAppearance(
 		UE_LOG(LogTemp, Log, TEXT("    • Roughness: %.2f"), AppearanceConfig.SkinRoughness);
 	}
 
-	// 2. 配置眼睛设置
+	// 2. Configure eyes settings
 	UE_LOG(LogTemp, Log, TEXT("  - Configuring eyes settings..."));
 	{
 		FMetaHumanCharacterEyesSettings EyesSettings;
 
-		// 左眼和右眼使用相同的设置（可以分别设置）
+		// Use the same settings for left and right eyes (can be set separately)
 		EyesSettings.EyeLeft.Iris.IrisPattern = AppearanceConfig.IrisPattern;
 		EyesSettings.EyeLeft.Iris.PrimaryColorU = AppearanceConfig.IrisPrimaryColorU;
 		EyesSettings.EyeLeft.Iris.PrimaryColorV = AppearanceConfig.IrisPrimaryColorV;
@@ -286,7 +286,7 @@ bool UMetaHumanParametricGenerator::ConfigureAppearance(
 		EyesSettings.EyeRight.Iris.PrimaryColorU = AppearanceConfig.IrisPrimaryColorU;
 		EyesSettings.EyeRight.Iris.PrimaryColorV = AppearanceConfig.IrisPrimaryColorV;
 
-		// 应用并提交眼睛设置
+		// Apply and commit eyes settings
 		EditorSubsystem->ApplyEyesSettings(Character, EyesSettings);
 		EditorSubsystem->CommitEyesSettings(Character, EyesSettings);
 
@@ -296,14 +296,14 @@ bool UMetaHumanParametricGenerator::ConfigureAppearance(
 			AppearanceConfig.IrisPrimaryColorU, AppearanceConfig.IrisPrimaryColorV);
 	}
 
-	// 3. 配置头部模型设置（睫毛等）
+	// 3. Configure head model settings (eyelashes, etc.)
 	UE_LOG(LogTemp, Log, TEXT("  - Configuring head model (eyelashes)..."));
 	{
 		FMetaHumanCharacterHeadModelSettings HeadModelSettings;
 		HeadModelSettings.Eyelashes.Type = AppearanceConfig.EyelashesType;
 		HeadModelSettings.Eyelashes.bEnableGrooms = AppearanceConfig.bEnableEyelashGrooms;
 
-		// 应用并提交头部模型设置
+		// Apply and commit head model settings
 		EditorSubsystem->ApplyHeadModelSettings(Character, HeadModelSettings);
 		EditorSubsystem->CommitHeadModelSettings(Character, HeadModelSettings);
 
@@ -318,7 +318,7 @@ bool UMetaHumanParametricGenerator::ConfigureAppearance(
 }
 
 // ============================================================================
-// 步骤 4: 生成角色资产
+// Step 4: Generate Character Assets
 // ============================================================================
 
 bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
@@ -336,23 +336,23 @@ bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
 		return false;
 	}
 
-	// 创建用于存放生成资产的临时包
+	// Create temporary package to hold generated assets
 	UPackage* TransientPackage = GetTransientPackage();
 
-	// 调用资产生成函数
-	// 这会生成：
-	//   - Face Mesh (面部骨骼网格)
-	//   - Body Mesh (身体骨骼网格)
-	//   - Textures (皮肤纹理、法线贴图等)
-	//   - Physics Asset (物理资产)
-	//   - RigLogic Assets (面部绑定资产)
+	// Call asset generation function
+	// This will generate:
+	//   - Face Mesh (facial skeletal mesh)
+	//   - Body Mesh (body skeletal mesh)
+	//   - Textures (skin textures, normal maps, etc.)
+	//   - Physics Asset (physics asset)
+	//   - RigLogic Assets (facial rig assets)
 	if (!EditorSubsystem->TryGenerateCharacterAssets(Character, TransientPackage, OutAssets))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to generate character assets"));
 		return false;
 	}
 
-	// 验证生成的资产
+	// Validate generated assets
 	if (!OutAssets.FaceMesh)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Generated assets missing FaceMesh"));
@@ -365,7 +365,7 @@ bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
 		return false;
 	}
 
-	// 打印生成的资产信息
+	// Print generated asset information
 	UE_LOG(LogTemp, Log, TEXT("  ✓ Generated Assets:"));
 	UE_LOG(LogTemp, Log, TEXT("    • Face Mesh: %s"), *OutAssets.FaceMesh->GetName());
 	UE_LOG(LogTemp, Log, TEXT("    • Body Mesh: %s"), *OutAssets.BodyMesh->GetName());
@@ -384,7 +384,7 @@ bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
 }
 
 // ============================================================================
-// 步骤 5: 保存资产
+// Step 5: Save Assets
 // ============================================================================
 
 bool UMetaHumanParametricGenerator::SaveCharacterAssets(
@@ -397,7 +397,7 @@ bool UMetaHumanParametricGenerator::SaveCharacterAssets(
 		return false;
 	}
 
-	// 1. 保存主角色资产
+	// 1. Save main character asset
 	UPackage* CharacterPackage = Character->GetOutermost();
 	FString CharacterFilePath = FPackageName::LongPackageNameToFilename(
 		CharacterPackage->GetName(),
@@ -416,19 +416,19 @@ bool UMetaHumanParametricGenerator::SaveCharacterAssets(
 
 	UE_LOG(LogTemp, Log, TEXT("  ✓ Saved character: %s"), *CharacterFilePath);
 
-	// 2. 注册资产到 AssetRegistry
+	// 2. Register asset to AssetRegistry
 	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
 	AssetRegistryModule.Get().AssetCreated(Character);
 
-	// 3. 保存生成的网格和纹理（可选 - 如果需要作为独立资产）
-	// 注意：通常这些资产会作为角色的一部分存储，不需要单独保存
-	// 但如果需要，可以使用类似的 SavePackage 流程
+	// 3. Save generated meshes and textures (optional - if needed as separate assets)
+	// Note: Usually these assets are stored as part of the character and don't need separate saving
+	// But if needed, similar SavePackage workflow can be used
 
 	return true;
 }
 
 // ============================================================================
-// 导出到蓝图
+// Export to Blueprint
 // ============================================================================
 
 UBlueprint* UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
@@ -445,7 +445,7 @@ UBlueprint* UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
 	UE_LOG(LogTemp, Log, TEXT("=== Exporting Character to Blueprint ==="));
 	UE_LOG(LogTemp, Log, TEXT("Blueprint: %s/%s"), *BlueprintPath, *BlueprintName);
 
-	// 1. 首先生成角色资产
+	// 1. First generate character assets
 	FMetaHumanCharacterGeneratedAssets GeneratedAssets;
 	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
 
@@ -455,7 +455,7 @@ UBlueprint* UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
 		return nullptr;
 	}
 
-	// 2. 创建蓝图
+	// 2. Create blueprint
 	UBlueprint* Blueprint = CreateBlueprintFromCharacter(
 		Character,
 		GeneratedAssets,
@@ -472,7 +472,7 @@ UBlueprint* UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
 }
 
 // ============================================================================
-// 辅助函数：创建蓝图
+// Helper Function: Create Blueprint
 // ============================================================================
 
 UBlueprint* UMetaHumanParametricGenerator::CreateBlueprintFromCharacter(
@@ -481,7 +481,7 @@ UBlueprint* UMetaHumanParametricGenerator::CreateBlueprintFromCharacter(
 	const FString& PackagePath,
 	const FString& BlueprintName)
 {
-	// 1. 创建蓝图包
+	// 1. Create blueprint package
 	FString PackageNameStr = FPackageName::ObjectPathToPackageName(PackagePath / BlueprintName);
 	UPackage* Package = CreatePackage(*PackageNameStr);
 
@@ -491,7 +491,7 @@ UBlueprint* UMetaHumanParametricGenerator::CreateBlueprintFromCharacter(
 		return nullptr;
 	}
 
-	// 2. 创建 Actor 蓝图
+	// 2. Create Actor blueprint
 	UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(
 		AActor::StaticClass(),
 		Package,
@@ -508,7 +508,7 @@ UBlueprint* UMetaHumanParametricGenerator::CreateBlueprintFromCharacter(
 		return nullptr;
 	}
 
-	// 3. 添加骨骼网格组件
+	// 3. Add skeletal mesh components
 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
 	if (!SCS)
 	{
@@ -516,7 +516,7 @@ UBlueprint* UMetaHumanParametricGenerator::CreateBlueprintFromCharacter(
 		return nullptr;
 	}
 
-	// 添加面部网格组件
+	// Add face mesh component
 	if (Assets.FaceMesh)
 	{
 		USCS_Node* FaceNode = SCS->CreateNode(USkeletalMeshComponent::StaticClass(), TEXT("FaceMesh"));
@@ -530,7 +530,7 @@ UBlueprint* UMetaHumanParametricGenerator::CreateBlueprintFromCharacter(
 		}
 	}
 
-	// 添加身体网格组件
+	// Add body mesh component
 	if (Assets.BodyMesh)
 	{
 		USCS_Node* BodyNode = SCS->CreateNode(USkeletalMeshComponent::StaticClass(), TEXT("BodyMesh"));
@@ -538,16 +538,16 @@ UBlueprint* UMetaHumanParametricGenerator::CreateBlueprintFromCharacter(
 		if (BodyComp)
 		{
 			BodyComp->SetSkeletalMesh(Assets.BodyMesh);
-			BodyComp->SetRelativeLocation(FVector(0, 0, -90));  // 身体稍微向下偏移
+			BodyComp->SetRelativeLocation(FVector(0, 0, -90));  // Slightly offset body downward
 			SCS->AddNode(BodyNode);
 			UE_LOG(LogTemp, Log, TEXT("  + Added Body Mesh component"));
 		}
 	}
 
-	// 4. 编译蓝图
+	// 4. Compile blueprint
 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 
-	// 5. 保存蓝图
+	// 5. Save blueprint
 	FString BlueprintFilePath = FPackageName::LongPackageNameToFilename(
 		Package->GetName(),
 		FPackageName::GetAssetPackageExtension()
@@ -563,7 +563,7 @@ UBlueprint* UMetaHumanParametricGenerator::CreateBlueprintFromCharacter(
 		return nullptr;
 	}
 
-	// 6. 注册到资产注册表
+	// 6. Register to Asset Registry
 	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
 	AssetRegistryModule.Get().AssetCreated(Blueprint);
 
@@ -571,7 +571,7 @@ UBlueprint* UMetaHumanParametricGenerator::CreateBlueprintFromCharacter(
 }
 
 // ============================================================================
-// 辅助函数：将测量值转换为约束
+// Helper Function: Convert Measurements to Constraints
 // ============================================================================
 
 TArray<FMetaHumanCharacterBodyConstraint> UMetaHumanParametricGenerator::ConvertMeasurementsToConstraints(
@@ -579,15 +579,15 @@ TArray<FMetaHumanCharacterBodyConstraint> UMetaHumanParametricGenerator::Convert
 {
 	TArray<FMetaHumanCharacterBodyConstraint> Constraints;
 
-	// 遍历所有测量值并创建约束
+	// Iterate through all measurements and create constraints
 	for (const auto& Pair : Measurements)
 	{
 		FMetaHumanCharacterBodyConstraint Constraint;
 		Constraint.Name = FName(*Pair.Key);
-		Constraint.bIsActive = true;  // 激活此约束
-		Constraint.TargetMeasurement = Pair.Value;  // 目标值（厘米）
+		Constraint.bIsActive = true;  // Activate this constraint
+		Constraint.TargetMeasurement = Pair.Value;  // Target value (centimeters)
 
-		// 设置合理的最小/最大范围（目标值的 ±50%）
+		// Set reasonable min/max range (±50% of target value)
 		Constraint.MinMeasurement = Pair.Value * 0.5f;
 		Constraint.MaxMeasurement = Pair.Value * 1.5f;
 
@@ -598,7 +598,7 @@ TArray<FMetaHumanCharacterBodyConstraint> UMetaHumanParametricGenerator::Convert
 }
 
 // ============================================================================
-// 新增：下载纹理源数据
+// Added: Download Texture Source Data
 // ============================================================================
 
 bool UMetaHumanParametricGenerator::DownloadTextureSourceData(UMetaHumanCharacter* Character)
@@ -609,7 +609,7 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData(UMetaHumanCharacte
 		return false;
 	}
 
-	// 确保在游戏线程中获取 EditorSubsystem
+	// Ensure EditorSubsystem is obtained in the game thread
 	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = nullptr;
 	if (IsInGameThread())
 	{
@@ -617,8 +617,8 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData(UMetaHumanCharacte
 	}
 	else
 	{
-		// 如果不在游戏线程，我们直接返回 false，让主线程处理
-		// 这是因为 MetaHuman 操作必须在游戏线程中进行
+		// If not in the game thread, we return false directly to let the main thread handle it
+		// This is because MetaHuman operations must run on the game thread
 		UE_LOG(LogTemp, Warning, TEXT("DownloadTextureSourceData called from background thread - returning false. MetaHuman operations must run on game thread."));
 		UE_LOG(LogTemp, Warning, TEXT("  This is normal - texture download will be handled by the main generation process."));
 		return false;
@@ -641,12 +641,12 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 		return false;
 	}
 
-	// 检查是否已经在下载纹理
+	// Check if texture download is already in progress
 	if (EditorSubsystem->IsRequestingHighResolutionTextures(Character))
 	{
 		UE_LOG(LogTemp, Log, TEXT("Texture download already in progress, waiting..."));
 
-		// 等待下载完成（最多等待60秒）
+		// Wait for download to complete (maximum 60 seconds)
 		const float MaxWaitTime = 60.0f;
 		const float StartTime = FPlatformTime::Seconds();
 
@@ -659,46 +659,46 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 				return false;
 			}
 
-			// 处理编辑器 tick，让下载继续进行
-			// 注意：在后台线程中，我们不需要手动处理 tick
-			FPlatformProcess::Sleep(0.5f); // 在后台线程中可以安全地使用较长的睡眠时间
+			// Handle editor tick to allow download to continue
+			// Note: In background thread, we don't need to manually handle tick
+			FPlatformProcess::Sleep(0.5f); // Can safely use longer sleep time in background thread
 		}
 
 		UE_LOG(LogTemp, Log, TEXT("Texture download completed"));
 		return true;
 	}
 
-	// 检查角色是否有合成纹理
+	// Check if character has synthesized textures
 	if (!Character->HasSynthesizedTextures())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Character does not have synthesized textures, cannot download high-res textures"));
 		return false;
 	}
 
-	// 检查纹理合成是否启用
+	// Check if texture synthesis is enabled
 	if (!EditorSubsystem->IsTextureSynthesisEnabled())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Texture synthesis is not enabled"));
 		return false;
 	}
 
-	// 步骤 1: 检查是否需要自动绑定（autorig）
+	// Step 1: Check if auto-rigging (autorig) is needed
 	UE_LOG(LogTemp, Log, TEXT("Checking if autorig is required before texture download..."));
 
-	// 获取当前的绑定状态
+	// Get current rigging state
 	EMetaHumanCharacterRigState RigState = EditorSubsystem->GetRiggingState(Character);
 
 	if (RigState != EMetaHumanCharacterRigState::Rigged)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Character is not rigged, performing autorig first..."));
 
-		// 检查是否已经在进行自动绑定
+		// Check if auto-rigging is already in progress
 		if (EditorSubsystem->IsAutoRiggingFace(Character))
 		{
 			UE_LOG(LogTemp, Log, TEXT("Autorig already in progress, waiting..."));
 
-			// 等待自动绑定完成
-			const float MaxAutorigWaitTime = 300.0f; // 5分钟
+			// Wait for auto-rigging to complete
+			const float MaxAutorigWaitTime = 300.0f; // 5 minutes
 			const float AutorigStartTime = FPlatformTime::Seconds();
 
 			while (EditorSubsystem->IsAutoRiggingFace(Character))
@@ -710,18 +710,18 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 					break;
 				}
 
-				// 在后台线程中不需要手动处理 tick
-				FPlatformProcess::Sleep(1.0f); // 较长的睡眠时间，因为这是后台操作
+				// In background thread, no need to manually handle tick
+				FPlatformProcess::Sleep(1.0f); // Longer sleep time because this is a background operation
 			}
 		}
 		else
 		{
-			// 执行自动绑定
+			// Execute auto-rigging
 			UE_LOG(LogTemp, Log, TEXT("Starting autorig..."));
 			EditorSubsystem->AutoRigFace(Character, UE::MetaHuman::ERigType::JointsAndBlendshapes);
 
-			// 等待自动绑定完成
-			const float MaxAutorigWaitTime = 300.0f; // 5分钟
+			// Wait for auto-rigging to complete
+			const float MaxAutorigWaitTime = 300.0f; // 5 minutes
 			const float AutorigStartTime = FPlatformTime::Seconds();
 			float LastAutorigProgress = 0.0f;
 
@@ -729,7 +729,7 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 			{
 				const float AutorigElapsedTime = FPlatformTime::Seconds() - AutorigStartTime;
 
-				// 每15秒报告一次进度
+				// Report progress every 15 seconds
 				if (AutorigElapsedTime - LastAutorigProgress > 15.0f)
 				{
 					UE_LOG(LogTemp, Log, TEXT("Autorig in progress... (%.1f seconds elapsed)"), AutorigElapsedTime);
@@ -742,15 +742,15 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 					break;
 				}
 
-				// 在后台线程中不需要手动处理 tick
-				FPlatformProcess::Sleep(1.0f); // 较长的睡眠时间，因为这是后台操作
+				// In background thread, no need to manually handle tick
+				FPlatformProcess::Sleep(1.0f); // Longer sleep time because this is a background operation
 			}
 
 			const float AutorigTotalTime = FPlatformTime::Seconds() - AutorigStartTime;
 			UE_LOG(LogTemp, Log, TEXT("Autorig completed in %.1f seconds"), AutorigTotalTime);
 		}
 
-		// 再次检查绑定状态
+		// Check rigging state again
 		RigState = EditorSubsystem->GetRiggingState(Character);
 		if (RigState != EMetaHumanCharacterRigState::Rigged)
 		{
@@ -766,14 +766,14 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 		UE_LOG(LogTemp, Log, TEXT("Character is already rigged, skipping autorig"));
 	}
 
-	// 步骤 2: 请求纹理下载
+	// Step 2: Request texture download
 	UE_LOG(LogTemp, Log, TEXT("Requesting 2k texture download..."));
 	UE_LOG(LogTemp, Warning, TEXT("Note: This requires MetaHuman cloud services login. If not logged in, download will fail but generation will continue with default textures."));
 
 	EditorSubsystem->RequestHighResolutionTextures(Character, ERequestTextureResolution::Res2k);
 
-	// 等待下载完成
-	const float MaxWaitTime = 120.0f; // 纹理下载可能需要更长时间
+	// Wait for download to complete
+	const float MaxWaitTime = 120.0f; // Texture download may take more time
 	const float StartTime = FPlatformTime::Seconds();
 	float LastProgressReport = 0.0f;
 	bool bDownloadStarted = false;
@@ -783,7 +783,7 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 		const float ElapsedTime = FPlatformTime::Seconds() - StartTime;
 		bDownloadStarted = true;
 
-		// 每10秒报告一次进度
+		// Report progress every 10 seconds
 		if (ElapsedTime - LastProgressReport > 10.0f)
 		{
 			UE_LOG(LogTemp, Log, TEXT("Still downloading textures... (%.1f seconds elapsed)"), ElapsedTime);
@@ -801,8 +801,8 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 			break;
 		}
 
-		// 在后台线程中不需要手动处理编辑器 tick
-		FPlatformProcess::Sleep(1.0f); // 后台线程可以使用更长的睡眠间隔
+		// In background thread, no need to manually handle editor tick
+		FPlatformProcess::Sleep(1.0f); // Background thread can use longer sleep interval
 	}
 
 	const float TotalTime = FPlatformTime::Seconds() - StartTime;

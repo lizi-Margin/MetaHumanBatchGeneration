@@ -5,10 +5,6 @@
 #include "ToolMenus.h"
 #include "Widgets/Notifications/SNotificationList.h"
 #include "Framework/Notifications/NotificationManager.h"
-#include "Async/Async.h"
-#include "HAL/PlatformProcess.h"
-#include "Engine/Engine.h"
-#include "Engine/World.h"
 
 #define LOCTEXT_NAMESPACE "FMetaHumanParametricPluginModule"
 
@@ -21,7 +17,6 @@ extern void Example_PluginTest();
 
 void FMetaHumanParametricPluginModule::StartupModule()
 {
-	// 插件启动时的初始化代码
 	UE_LOG(LogTemp, Log, TEXT("MetaHumanParametricPlugin module has been loaded"));
 
 	// Register menu extensions
@@ -30,16 +25,13 @@ void FMetaHumanParametricPluginModule::StartupModule()
 
 void FMetaHumanParametricPluginModule::ShutdownModule()
 {
-	// 清理菜单扩展
 	UToolMenus::UnregisterOwner(this);
 
-	// 插件关闭时的清理代码
 	UE_LOG(LogTemp, Log, TEXT("MetaHumanParametricPlugin module has been unloaded"));
 }
 
 void FMetaHumanParametricPluginModule::RegisterMenuExtensions()
 {
-	// 等待 ToolMenus 模块加载
 	UToolMenus::RegisterStartupCallback(
 		FSimpleMulticastDelegate::FDelegate::CreateStatic(&FMetaHumanParametricPluginModule::AddToolbarExtension)
 	);
@@ -101,6 +93,7 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnGenerateShortRounded))
 			);
 
+			// 示例 4: 批量生成
 			FToolMenuEntry& Entry4 = SubSection.AddMenuEntry(
 				"BatchGenerate",
 				LOCTEXT("BatchGenerateLabel", "4. Batch Generate (5 Characters)"),
@@ -118,53 +111,60 @@ void FMetaHumanParametricPluginModule::OnGenerateSlenderFemale()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 1: Slender Female..."));
 
-	// 显示通知
-	FNotificationInfo Info(LOCTEXT("GeneratingSlenderFemale", "Generating Slender Female Character... (This will take a few minutes)"));
-	Info.ExpireDuration = 30.0f; // 更长的显示时间，因为生成需要时间
-	Info.bUseThrobber = true;
-	Info.bUseSuccessFailIcons = true;
-	TSharedPtr<SNotificationItem> NotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
+	FNotificationInfo Info(LOCTEXT("GeneratingSlenderFemale", "Generating Slender Female Character..."));
+	Info.ExpireDuration = 3.0f;
+	FSlateNotificationManager::Get().AddNotification(Info);
 
-    Example1_CreateSlenderFemale();
+	Example1_CreateSlenderFemale();
+
+	FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete", "Character Generation Complete! Check Output Log."));
+	CompletedInfo.ExpireDuration = 5.0f;
+	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
 }
 
 void FMetaHumanParametricPluginModule::OnGenerateMuscularMale()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 2: Muscular Male..."));
 
-	FNotificationInfo Info(LOCTEXT("GeneratingMuscularMale", "Generating Muscular Male Character... (This will take a few minutes)"));
-	Info.ExpireDuration = 30.0f;
-	Info.bUseThrobber = true;
-	Info.bUseSuccessFailIcons = true;
-	TSharedPtr<SNotificationItem> NotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
+	FNotificationInfo Info(LOCTEXT("GeneratingMuscularMale", "Generating Muscular Male Character..."));
+	Info.ExpireDuration = 3.0f;
+	FSlateNotificationManager::Get().AddNotification(Info);
 
-    Example2_CreateMuscularMale();
+	Example2_CreateMuscularMale();
+
+	FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete2", "Character Generation Complete! Check Output Log."));
+	CompletedInfo.ExpireDuration = 5.0f;
+	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
 }
 
 void FMetaHumanParametricPluginModule::OnGenerateShortRounded()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 3: Short Rounded..."));
 
-	FNotificationInfo Info(LOCTEXT("GeneratingShortRounded", "Generating Short Rounded Character... (This will take a few minutes)"));
-	Info.ExpireDuration = 30.0f;
-	Info.bUseThrobber = true;
-	Info.bUseSuccessFailIcons = true;
-	TSharedPtr<SNotificationItem> NotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
+	FNotificationInfo Info(LOCTEXT("GeneratingShortRounded", "Generating Short Rounded Character..."));
+	Info.ExpireDuration = 3.0f;
+	FSlateNotificationManager::Get().AddNotification(Info);
 
 	Example3_CreateShortRoundedCharacter();
+
+	FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete3", "Character Generation Complete! Check Output Log."));
+	CompletedInfo.ExpireDuration = 5.0f;
+	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
 }
 
 void FMetaHumanParametricPluginModule::OnBatchGenerate()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 4: Batch Generate..."));
 
-	FNotificationInfo Info(LOCTEXT("BatchGenerating", "Batch Generating 5 Characters... (This will take several minutes!)"));
-	Info.ExpireDuration = 60.0f;
-	Info.bUseThrobber = true;
-	Info.bUseSuccessFailIcons = true;
-	TSharedPtr<SNotificationItem> NotificationPtr = FSlateNotificationManager::Get().AddNotification(Info);
+	FNotificationInfo Info(LOCTEXT("BatchGenerating", "Batch Generating 5 Characters... This may take a while."));
+	Info.ExpireDuration = 5.0f;
+	FSlateNotificationManager::Get().AddNotification(Info);
 
- 	Example4_BatchCreateCharacters();
+	Example4_BatchCreateCharacters();
+
+	FNotificationInfo CompletedInfo(LOCTEXT("BatchComplete", "Batch Generation Complete! Check Output Log for results."));
+	CompletedInfo.ExpireDuration = 5.0f;
+	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
 }
 
 void FMetaHumanParametricPluginModule::OnRunPluginTest()
@@ -181,3 +181,7 @@ void FMetaHumanParametricPluginModule::OnRunPluginTest()
 	CompletedInfo.ExpireDuration = 5.0f;
 	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
 }
+
+#undef LOCTEXT_NAMESPACE
+
+IMPLEMENT_MODULE(FMetaHumanParametricPluginModule, MetaHumanParametricPlugin)
