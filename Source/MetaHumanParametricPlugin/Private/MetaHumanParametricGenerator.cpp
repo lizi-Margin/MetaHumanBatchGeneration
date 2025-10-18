@@ -10,6 +10,7 @@
 #include "MetaHumanCharacterBodyIdentity.h"
 #include "MetaHumanCollection.h"
 #include "MetaHumanBodyType.h"
+#include "MetaHumanAssetIOUtility.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/SavePackage.h"
@@ -456,10 +457,16 @@ bool UMetaHumanParametricGenerator::SaveCharacterAssets(
 	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
 	AssetRegistryModule.Get().AssetCreated(Character);
 
-	// 3. Save generated meshes and textures (optional - if needed as separate assets)
-	// Note: Usually these assets are stored as part of the character and don't need separate saving
-	// But if needed, similar SavePackage workflow can be used
+	// 3. Save generated meshes and textures as separate assets
+	TArray<FString> SavedAssetPaths;
+	int32 SavedCount = UMetaHumanAssetIOUtility::SaveAllGeneratedAssets(
+		GeneratedAssets,
+		OutputPath,
+		Character->GetName(),
+		SavedAssetPaths
+	);
 
+	UE_LOG(LogTemp, Log, TEXT("  ✓ Saved %d generated assets as separate files"), SavedCount);
 
 	// RemoveObjectToEdit
 	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();

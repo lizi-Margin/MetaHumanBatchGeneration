@@ -23,6 +23,8 @@
 
 // Unreal Engine Headers
 #include "Engine/SkeletalMesh.h"
+#include "Engine/Texture2D.h"
+#include "PhysicsEngine/PhysicsAsset.h"
 #include "Engine/Blueprint.h"
 #include "Animation/Skeleton.h"
 #include "AssetRegistry/AssetRegistryModule.h"
