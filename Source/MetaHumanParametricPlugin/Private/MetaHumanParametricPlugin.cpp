@@ -415,8 +415,14 @@ void FMetaHumanParametricPluginModule::OnStep1PrepareAndRig()
 
 	FMetaHumanAppearanceConfig AppearanceConfig;
 
-	FString CharacterName = TEXT("TwoStepTest");
+	// Generate unique character name with timestamp to avoid conflicts
+	FDateTime Now = FDateTime::Now();
+	FString CharacterName = FString::Printf(TEXT("TwoStepTest_%02d%02d_%02d%02d%02d"),
+		Now.GetMonth(), Now.GetDay(),
+		Now.GetHour(), Now.GetMinute(), Now.GetSecond());
 	FString OutputPath = TEXT("/Game/MetaHumans");
+
+	UE_LOG(LogTemp, Log, TEXT("Creating character: %s"), *CharacterName);
 
 	UMetaHumanCharacter* Character = nullptr;
 	bool bSuccess = UMetaHumanParametricGenerator::PrepareAndRigCharacter(
@@ -445,7 +451,7 @@ void FMetaHumanParametricPluginModule::OnStep1PrepareAndRig()
 	{
 		UE_LOG(LogTemp, Error, TEXT("✗ Step 1 Failed!"));
 
-		FNotificationInfo ErrorInfo(LOCTEXT("Step1Failed", "✗ Step 1 Failed - Check Output Log"));
+		FNotificationInfo ErrorInfo(LOCTEXT("Step1Failed", "✓ Step 1 Failed - Check Output Log"));
 		ErrorInfo.ExpireDuration = 5.0f;
 		FSlateNotificationManager::Get().AddNotification(ErrorInfo);
 	}
