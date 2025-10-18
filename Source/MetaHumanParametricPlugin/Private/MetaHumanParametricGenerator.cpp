@@ -24,6 +24,24 @@
 #include "Cloud/MetaHumanARServiceRequest.h"
 #include "Cloud/MetaHumanServiceRequest.h"  // For ServiceAuthentication namespace
 
+
+UMetaHumanCharacterEditorSubsystem* UMetaHumanParametricGenerator::getEditorSubsystem()
+{
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = nullptr;
+	if (IsInGameThread())
+	{
+		EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+		return EditorSubsystem;
+	}
+	else
+	{
+		// If not in the game thread, we return false directly to let the main thread handle it
+		UE_LOG(LogTemp, Warning, TEXT("getEditorSubsystem called from background thread - returning null. MetaHuman operations must run on game thread."));
+		return nullptr;
+	}
+}
+
+
 // ============================================================================
 // Main Generation Function
 // ============================================================================
@@ -154,7 +172,7 @@ UMetaHumanCharacter* UMetaHumanParametricGenerator::CreateBaseCharacter(
 	Character->TemplateType = TemplateType;
 
 	// 4. Initialize character (load necessary models and data)
-	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
 	if (EditorSubsystem)
 	{
 		EditorSubsystem->InitializeMetaHumanCharacter(Character);
@@ -190,7 +208,7 @@ bool UMetaHumanParametricGenerator::ConfigureBodyParameters(
 		return false;
 	}
 
-	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
 	if (!EditorSubsystem)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to get editor subsystem"));
@@ -262,7 +280,7 @@ bool UMetaHumanParametricGenerator::ConfigureAppearance(
 		return false;
 	}
 
-	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
 	if (!EditorSubsystem)
 	{
 		return false;
@@ -343,7 +361,7 @@ bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
 		return false;
 	}
 
-	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
 	if (!EditorSubsystem)
 	{
 		return false;
@@ -442,6 +460,16 @@ bool UMetaHumanParametricGenerator::SaveCharacterAssets(
 	// Note: Usually these assets are stored as part of the character and don't need separate saving
 	// But if needed, similar SavePackage workflow can be used
 
+
+	// RemoveObjectToEdit
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+	if (!EditorSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get editor subsystem"));
+		return false;
+	}
+	EditorSubsystem->RemoveObjectToEdit(Character);
+	UE_LOG(LogTemp, Log, TEXT("  ✓ Removed character from edit: %s"), *CharacterFilePath);
 	return true;
 }
 
@@ -465,7 +493,7 @@ UBlueprint* UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
 
 	// 1. First generate character assets
 	FMetaHumanCharacterGeneratedAssets GeneratedAssets;
-	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
 
 	if (!EditorSubsystem || !EditorSubsystem->TryGenerateCharacterAssets(Character, GetTransientPackage(), GeneratedAssets))
 	{
@@ -628,19 +656,7 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData(UMetaHumanCharacte
 	}
 
 	// Ensure EditorSubsystem is obtained in the game thread
-	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = nullptr;
-	if (IsInGameThread())
-	{
-		EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
-	}
-	else
-	{
-		// If not in the game thread, we return false directly to let the main thread handle it
-		// This is because MetaHuman operations must run on the game thread
-		UE_LOG(LogTemp, Warning, TEXT("DownloadTextureSourceData called from background thread - returning false. MetaHuman operations must run on game thread."));
-		UE_LOG(LogTemp, Warning, TEXT("  This is normal - texture download will be handled by the main generation process."));
-		return false;
-	}
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
 
 	if (!EditorSubsystem)
 	{
@@ -740,6 +756,9 @@ bool UMetaHumanParametricGenerator::EnsureCloudServicesLogin()
 	bool bIsLoggedIn = false;
 	bool bCheckComplete = false;
 
+	// log in if not
+	TestCloudAuthentication();
+
 	// 异步检查登录状态
 	UE::MetaHuman::ServiceAuthentication::CheckHasLoggedInUserAsync(
 		UE::MetaHuman::ServiceAuthentication::FOnCheckHasLoggedInUserCompleteDelegate::CreateLambda(
@@ -770,65 +789,12 @@ bool UMetaHumanParametricGenerator::EnsureCloudServicesLogin()
 		UE_LOG(LogTemp, Log, TEXT("✓ User is already logged in to MetaHuman cloud services"));
 		return true;
 	}
-
-	// 用户未登录，尝试登录
-	UE_LOG(LogTemp, Warning, TEXT("User is not logged in. Attempting automatic login..."));
-	UE_LOG(LogTemp, Warning, TEXT("  Note: A browser window may open for Epic Games login"));
-
-	bool bLoginSucceeded = false;
-	bool bLoginComplete = false;
-
-	UE::MetaHuman::ServiceAuthentication::LoginToAuthEnvironment(
-		UE::MetaHuman::ServiceAuthentication::FOnLoginCompleteDelegate::CreateLambda(
-			[&bLoginSucceeded, &bLoginComplete]()
-			{
-				bLoginSucceeded = true;
-				bLoginComplete = true;
-				UE_LOG(LogTemp, Log, TEXT("✓ Successfully logged in to MetaHuman cloud services"));
-			}
-		),
-		UE::MetaHuman::ServiceAuthentication::FOnLoginFailedDelegate::CreateLambda(
-			[&bLoginSucceeded, &bLoginComplete]()
-			{
-				bLoginSucceeded = false;
-				bLoginComplete = true;
-				UE_LOG(LogTemp, Error, TEXT("✗ Failed to login to MetaHuman cloud services"));
-			}
-		)
-	);
-
-	// 等待登录完成（最多等待 60 秒，因为可能需要打开浏览器）
-	const float MaxLoginWaitTime = 60.0f;
-	const float LoginStartTime = FPlatformTime::Seconds();
-	float LastProgressReport = 0.0f;
-
-	while (!bLoginComplete && (FPlatformTime::Seconds() - LoginStartTime) < MaxLoginWaitTime)
+	else
 	{
-		const float ElapsedTime = FPlatformTime::Seconds() - LoginStartTime;
 
-		// 每 5 秒报告一次进度
-		if (ElapsedTime - LastProgressReport > 5.0f)
-		{
-			UE_LOG(LogTemp, Log, TEXT("Still waiting for login... (%.1f seconds elapsed)"), ElapsedTime);
-			UE_LOG(LogTemp, Log, TEXT("  If a browser window opened, please complete the login process"));
-			LastProgressReport = ElapsedTime;
-		}
-
-		FPlatformProcess::Sleep(0.5f);
-	}
-
-	if (!bLoginComplete)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Timeout while waiting for cloud services login (waited %.1f seconds)"), MaxLoginWaitTime);
-		UE_LOG(LogTemp, Warning, TEXT("  Possible causes:"));
-		UE_LOG(LogTemp, Warning, TEXT("  - Login browser window was not completed"));
-		UE_LOG(LogTemp, Warning, TEXT("  - Network connectivity issues"));
-		UE_LOG(LogTemp, Warning, TEXT("  - MetaHuman cloud services unavailable"));
-		UE_LOG(LogTemp, Warning, TEXT("  - EOS (Epic Online Services) configuration missing"));
+		UE_LOG(LogTemp, Log, TEXT("✗ User is NOT logged in to MetaHuman cloud services"));
 		return false;
 	}
-
-	return bLoginSucceeded;
 }
 
 void UMetaHumanParametricGenerator::CheckCloudServicesLoginAsync(TFunction<void(bool)> OnCheckComplete)

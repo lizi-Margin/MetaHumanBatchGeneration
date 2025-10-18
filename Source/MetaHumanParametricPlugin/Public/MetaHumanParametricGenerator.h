@@ -191,6 +191,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Debug")
 	static void TestCloudAuthentication();
 
+private: 
+	static UMetaHumanCharacterEditorSubsystem* getEditorSubsystem();
 
 private:
 	// ========== 内部辅助函数 ==========
