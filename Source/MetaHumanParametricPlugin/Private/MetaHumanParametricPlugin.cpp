@@ -2,19 +2,14 @@
 
 #include "MetaHumanParametricPlugin.h"
 #include "MetaHumanParametricGenerator.h"
+#include "EditorBatchGenerationSubsystem.h"
 #include "LevelEditor.h"
 #include "ToolMenus.h"
 #include "Widgets/Notifications/SNotificationList.h"
 #include "Framework/Notifications/NotificationManager.h"
+#include "Editor.h"
 
 #define LOCTEXT_NAMESPACE "FMetaHumanParametricPluginModule"
-
-// Forward declarations for example functions
-extern void Example1_CreateSlenderFemale();
-extern void Example2_CreateMuscularMale();
-extern void Example3_CreateShortRoundedCharacter();
-extern void Example4_BatchCreateCharacters();
-extern void Example_PluginTest();
 
 // Define static member variables for two-step workflow
 UMetaHumanCharacter* FMetaHumanParametricPluginModule::LastGeneratedCharacter = nullptr;
@@ -96,62 +91,6 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 		FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Details")
 	);
 
-	Section.AddSubMenu(
-		"MetaHumanExamples",
-		LOCTEXT("MetaHumanExamplesLabel", "Legacy Examples (Blocking)"),
-		LOCTEXT("MetaHumanExamplesTooltip", "Generate example MetaHuman characters (runs in background thread)"),
-		FNewToolMenuDelegate::CreateLambda([](UToolMenu* SubMenu)
-		{
-			FToolMenuSection& SubSection = SubMenu->AddSection("Examples", LOCTEXT("Examples", "Character Examples"));
-
-			// TEST: Plugin basics test
-			FToolMenuEntry& EntryTest = SubSection.AddMenuEntry(
-				"PluginTest",
-				LOCTEXT("PluginTestLabel", "0. Run Plugin Test (Safe)"),
-				LOCTEXT("PluginTestTooltip", "Test plugin functionality without MetaHuman dependencies"),
-				FSlateIcon(),
-				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnRunPluginTest))
-			);
-
-			SubSection.AddSeparator("TestSeparator");
-
-			FToolMenuEntry& Entry1 = SubSection.AddMenuEntry(
-				"SlenderFemale",
-				LOCTEXT("SlenderFemaleLabel", "1. Slender Female"),
-				LOCTEXT("SlenderFemaleTooltip", "Create a slender female character (168cm, 62cm waist)"),
-				FSlateIcon(),
-				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnGenerateSlenderFemale))
-			);
-
-			FToolMenuEntry& Entry2 = SubSection.AddMenuEntry(
-				"MuscularMale",
-				LOCTEXT("MuscularMaleLabel", "2. Muscular Male"),
-				LOCTEXT("MuscularMaleTooltip", "Create a muscular male character (185cm, 110cm chest)"),
-				FSlateIcon(),
-				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnGenerateMuscularMale))
-			);
-
-			FToolMenuEntry& Entry3 = SubSection.AddMenuEntry(
-				"ShortRounded",
-				LOCTEXT("ShortRoundedLabel", "3. Short Rounded"),
-				LOCTEXT("ShortRoundedTooltip", "Create a short rounded character (155cm)"),
-				FSlateIcon(),
-				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnGenerateShortRounded))
-			);
-
-			// 示例 4: 批量生成
-			FToolMenuEntry& Entry4 = SubSection.AddMenuEntry(
-				"BatchGenerate",
-				LOCTEXT("BatchGenerateLabel", "4. Batch Generate (5 Characters)"),
-				LOCTEXT("BatchGenerateTooltip", "Generate 5 different character types in one go"),
-				FSlateIcon(),
-				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnBatchGenerate))
-			);
-		}),
-		false,
-		FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Viewports")
-	);
-
 	// Add Authentication submenu
 	Section.AddSubMenu(
 		"MetaHumanAuthentication",
@@ -191,91 +130,46 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 		false,
 		FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Lock")
 	);
-}
 
-void FMetaHumanParametricPluginModule::OnGenerateSlenderFemale()
-{
-	UE_LOG(LogTemp, Warning, TEXT("Starting Example 1: Slender Female..."));
-
-	FNotificationInfo Info(LOCTEXT("GeneratingSlenderFemale", "Generating Slender Female Character... (Running in background)"));
-	Info.ExpireDuration = 3.0f;
-	FSlateNotificationManager::Get().AddNotification(Info);
-
-	// Run generation in background thread to allow blocking operations (AutoRig wait loop)
-	Async(EAsyncExecution::Thread, []()
-	{
-		UE_LOG(LogTemp, Log, TEXT("=== Background Thread: Starting character generation ==="));
-		Example1_CreateSlenderFemale();
-
-		// Show completion notification on game thread
-		AsyncTask(ENamedThreads::GameThread, []()
+	// Add Batch Generation submenu
+	Section.AddSubMenu(
+		"MetaHumanBatchGen",
+		LOCTEXT("MetaHumanBatchGenLabel", "Batch Generation (Random)"),
+		LOCTEXT("MetaHumanBatchGenTooltip", "Automatic batch character generation with random parameters"),
+		FNewToolMenuDelegate::CreateLambda([](UToolMenu* SubMenu)
 		{
-			FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete", "Character Generation Complete! Check Output Log."));
-			CompletedInfo.ExpireDuration = 5.0f;
-			FSlateNotificationManager::Get().AddNotification(CompletedInfo);
-			UE_LOG(LogTemp, Log, TEXT("=== Background Thread: Character generation completed ==="));
-		});
-	});
-}
+			FToolMenuSection& BatchSection = SubMenu->AddSection("BatchGeneration", LOCTEXT("BatchGeneration", "Batch Generation"));
 
-void FMetaHumanParametricPluginModule::OnGenerateMuscularMale()
-{
-	UE_LOG(LogTemp, Warning, TEXT("Starting Example 2: Muscular Male..."));
+			// Start Batch Generation
+			BatchSection.AddMenuEntry(
+				"StartBatch",
+				LOCTEXT("StartBatchLabel", "Start Batch Generation"),
+				LOCTEXT("StartBatchTooltip", "Start generating random characters in the background"),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnStartBatchGeneration))
+			);
 
-	FNotificationInfo Info(LOCTEXT("GeneratingMuscularMale", "Generating Muscular Male Character..."));
-	Info.ExpireDuration = 3.0f;
-	FSlateNotificationManager::Get().AddNotification(Info);
+			// Check Batch Status
+			BatchSection.AddMenuEntry(
+				"CheckBatchStatus",
+				LOCTEXT("CheckBatchStatusLabel", "Check Status"),
+				LOCTEXT("CheckBatchStatusTooltip", "Check current batch generation progress"),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnCheckBatchStatus))
+			);
 
-	Example2_CreateMuscularMale();
-
-	FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete2", "Character Generation Complete! Check Output Log."));
-	CompletedInfo.ExpireDuration = 5.0f;
-	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
-}
-
-void FMetaHumanParametricPluginModule::OnGenerateShortRounded()
-{
-	UE_LOG(LogTemp, Warning, TEXT("Starting Example 3: Short Rounded..."));
-
-	FNotificationInfo Info(LOCTEXT("GeneratingShortRounded", "Generating Short Rounded Character..."));
-	Info.ExpireDuration = 3.0f;
-	FSlateNotificationManager::Get().AddNotification(Info);
-
-	Example3_CreateShortRoundedCharacter();
-
-	FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete3", "Character Generation Complete! Check Output Log."));
-	CompletedInfo.ExpireDuration = 5.0f;
-	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
-}
-
-void FMetaHumanParametricPluginModule::OnBatchGenerate()
-{
-	UE_LOG(LogTemp, Warning, TEXT("Starting Example 4: Batch Generate..."));
-
-	FNotificationInfo Info(LOCTEXT("BatchGenerating", "Batch Generating 5 Characters... This may take a while."));
-	Info.ExpireDuration = 5.0f;
-	FSlateNotificationManager::Get().AddNotification(Info);
-
-	Example4_BatchCreateCharacters();
-
-	FNotificationInfo CompletedInfo(LOCTEXT("BatchComplete", "Batch Generation Complete! Check Output Log for results."));
-	CompletedInfo.ExpireDuration = 5.0f;
-	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
-}
-
-void FMetaHumanParametricPluginModule::OnRunPluginTest()
-{
-	UE_LOG(LogTemp, Warning, TEXT("Starting Plugin Test..."));
-
-	FNotificationInfo Info(LOCTEXT("RunningPluginTest", "Running Plugin Test (Safe - No MetaHuman Dependencies)"));
-	Info.ExpireDuration = 3.0f;
-	FSlateNotificationManager::Get().AddNotification(Info);
-
-	Example_PluginTest();
-
-	FNotificationInfo CompletedInfo(LOCTEXT("PluginTestComplete", "Plugin Test Complete! Check Output Log for results."));
-	CompletedInfo.ExpireDuration = 5.0f;
-	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+			// Stop Batch Generation
+			BatchSection.AddMenuEntry(
+				"StopBatch",
+				LOCTEXT("StopBatchLabel", "Stop Batch Generation"),
+				LOCTEXT("StopBatchTooltip", "Stop the current batch generation process"),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnStopBatchGeneration))
+			);
+		}),
+		false,
+		FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Outliner")
+	);
 }
 
 // ============================================================================
@@ -524,6 +418,125 @@ void FMetaHumanParametricPluginModule::OnStep2Assemble()
 		ErrorInfo.ExpireDuration = 7.0f;
 		FSlateNotificationManager::Get().AddNotification(ErrorInfo);
 	}
+}
+
+// ============================================================================
+// Batch Generation Callbacks
+// ============================================================================
+
+void FMetaHumanParametricPluginModule::OnStartBatchGeneration()
+{
+	UE_LOG(LogTemp, Warning, TEXT("=== Starting Batch Generation ==="));
+
+	// Get the batch generation subsystem
+	UEditorBatchGenerationSubsystem* BatchSubsystem = GEditor->GetEditorSubsystem<UEditorBatchGenerationSubsystem>();
+	if (!BatchSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get EditorBatchGenerationSubsystem!"));
+		FNotificationInfo ErrorInfo(LOCTEXT("NoSubsystem", "Failed to get batch generation subsystem"));
+		ErrorInfo.ExpireDuration = 3.0f;
+		FSlateNotificationManager::Get().AddNotification(ErrorInfo);
+		return;
+	}
+
+	// Check if already running
+	if (BatchSubsystem->IsRunning())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Batch generation already running!"));
+		FNotificationInfo WarningInfo(LOCTEXT("AlreadyRunning", "Batch generation already running. Stop it first."));
+		WarningInfo.ExpireDuration = 3.0f;
+		FSlateNotificationManager::Get().AddNotification(WarningInfo);
+		return;
+	}
+
+	// Start batch generation
+	BatchSubsystem->StartBatchGeneration(
+		true,                                    // bLoopMode
+		TEXT("/Game/MetaHumans"),               // OutputPath
+		EMetaHumanQualityLevel::Cinematic,      // QualityLevel
+		2.0f,                                    // CheckInterval (check every 2 seconds)
+		5.0f                                     // LoopDelay (5 seconds between characters)
+	);
+
+	UE_LOG(LogTemp, Log, TEXT("✓ Batch generation started"));
+	UE_LOG(LogTemp, Log, TEXT("  Output: /Game/MetaHumans"));
+	UE_LOG(LogTemp, Log, TEXT("  Loop Mode: Enabled"));
+
+	FNotificationInfo SuccessInfo(LOCTEXT("BatchStarted", "✓ Batch Generation Started - Characters will generate automatically in loop mode"));
+	SuccessInfo.ExpireDuration = 5.0f;
+	FSlateNotificationManager::Get().AddNotification(SuccessInfo);
+}
+
+void FMetaHumanParametricPluginModule::OnStopBatchGeneration()
+{
+	UE_LOG(LogTemp, Warning, TEXT("=== Stopping Batch Generation ==="));
+
+	// Get the batch generation subsystem
+	UEditorBatchGenerationSubsystem* BatchSubsystem = GEditor->GetEditorSubsystem<UEditorBatchGenerationSubsystem>();
+	if (!BatchSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get EditorBatchGenerationSubsystem!"));
+		return;
+	}
+
+	if (!BatchSubsystem->IsRunning())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No batch generation running"));
+		FNotificationInfo WarningInfo(LOCTEXT("NoBatchRunning", "No batch generation is running"));
+		WarningInfo.ExpireDuration = 3.0f;
+		FSlateNotificationManager::Get().AddNotification(WarningInfo);
+		return;
+	}
+
+	// Stop the subsystem
+	BatchSubsystem->StopBatchGeneration();
+
+	UE_LOG(LogTemp, Log, TEXT("✓ Batch generation stopped"));
+
+	FNotificationInfo SuccessInfo(LOCTEXT("BatchStopped", "✓ Batch Generation Stopped"));
+	SuccessInfo.ExpireDuration = 3.0f;
+	FSlateNotificationManager::Get().AddNotification(SuccessInfo);
+}
+
+void FMetaHumanParametricPluginModule::OnCheckBatchStatus()
+{
+	UE_LOG(LogTemp, Log, TEXT("=== Checking Batch Generation Status ==="));
+
+	// Get the batch generation subsystem
+	UEditorBatchGenerationSubsystem* BatchSubsystem = GEditor->GetEditorSubsystem<UEditorBatchGenerationSubsystem>();
+	if (!BatchSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get EditorBatchGenerationSubsystem!"));
+		return;
+	}
+
+	if (!BatchSubsystem->IsRunning())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No batch generation running"));
+		FNotificationInfo WarningInfo(LOCTEXT("NoBatchForStatus", "No batch generation is running"));
+		WarningInfo.ExpireDuration = 3.0f;
+		FSlateNotificationManager::Get().AddNotification(WarningInfo);
+		return;
+	}
+
+	// Get status
+	EBatchGenState State;
+	FString CharacterName;
+	int32 Count;
+	BatchSubsystem->GetStatusInfo(State, CharacterName, Count);
+
+	FString StateString = BatchSubsystem->GetCurrentStateString();
+
+	UE_LOG(LogTemp, Log, TEXT("Current State: %s"), *StateString);
+	UE_LOG(LogTemp, Log, TEXT("Current Character: %s"), CharacterName.IsEmpty() ? TEXT("None") : *CharacterName);
+	UE_LOG(LogTemp, Log, TEXT("Characters Generated: %d"), Count);
+
+	FString StatusMessage = FString::Printf(TEXT("State: %s | Count: %d | Current: %s"),
+		*StateString, Count, CharacterName.IsEmpty() ? TEXT("None") : *CharacterName);
+
+	FNotificationInfo StatusInfo(FText::FromString(StatusMessage));
+	StatusInfo.ExpireDuration = 5.0f;
+	FSlateNotificationManager::Get().AddNotification(StatusInfo);
 }
 
 #undef LOCTEXT_NAMESPACE

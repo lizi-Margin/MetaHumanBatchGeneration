@@ -190,48 +190,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Generation")
 	static FString GetRiggingStatusString(UMetaHumanCharacter* Character);
 
-	// ============================================================================
-	// Legacy Function (One-Step, Blocking - Not Recommended for UI)
-	// ============================================================================
-
-	/**
-	 * 一步式生成函数：创建一个完整的参数化 MetaHuman 角色
-	 *
-	 * WARNING: 此函数包含阻塞等待操作（AutoRig），必须在后台线程调用！
-	 * 推荐使用 PrepareAndRigCharacter() + AssembleCharacter() 的两步式方案
-	 *
-	 * @param CharacterName - 角色名称
-	 * @param OutputPath - 输出路径 (例如: "/Game/MyCharacters/")
-	 * @param BodyConfig - 身体参数配置
-	 * @param AppearanceConfig - 外观配置
-	 * @param OutCharacter - 输出：创建的角色资产
-	 * @return 是否成功创建
-	 */
-	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Generation")
-	static bool GenerateParametricMetaHuman(
-		const FString& CharacterName,
-		const FString& OutputPath,
-		const FMetaHumanBodyParametricConfig& BodyConfig,
-		const FMetaHumanAppearanceConfig& AppearanceConfig,
-		UMetaHumanCharacter*& OutCharacter);
-
-	// /**
-	//  * 从创建的角色生成蓝图
-	//  *
-	//  * @param Character - 源角色资产
-	//  * @param BlueprintPath - 蓝图保存路径
-	//  * @param BlueprintName - 蓝图名称
-	//  * @return 创建的蓝图资产
-	//  */
-	// UFUNCTION(BlueprintCallable, Category = "MetaHuman|Export")
-	// static UBlueprint* ExportCharacterToBlueprint(
-	// 	UMetaHumanCharacter* Character,
-	// 	const FString& BlueprintPath,
-	// 	const FString& BlueprintName);
-
-	// ============================================================================
-	// MetaHuman Cloud Services Authentication (新增)
-	// ============================================================================
 
 	/**
 	 * 检查并确保用户已登录到 MetaHuman 云服务
@@ -312,32 +270,9 @@ private:
 	static bool DownloadTextureSourceData_Impl(UMetaHumanCharacter* Character, UMetaHumanCharacterEditorSubsystem* EditorSubsystem);
 
 	/**
-	 * 步骤 5: 生成角色资产（网格、材质、纹理等）
-	 */
-	static bool GenerateCharacterAssets(
-		UMetaHumanCharacter* Character,
-		FMetaHumanCharacterGeneratedAssets& OutAssets);
-
-	/**
-	 * 步骤 6: 保存资产到磁盘
-	 */
-	static bool SaveCharacterAssets(
-		UMetaHumanCharacter* Character,
-		const FString& OutputPath,
-		const FMetaHumanCharacterGeneratedAssets& GeneratedAssets);
-
-	/**
 	 * 辅助：将身体测量值转换为约束数组
 	 */
 	static TArray<FMetaHumanCharacterBodyConstraint> ConvertMeasurementsToConstraints(
 		const TMap<FString, float>& Measurements);
 
-	/**
-	 * 辅助：创建蓝图并设置组件
-	 */
-	// static UBlueprint* CreateBlueprintFromCharacter(
-	// 	UMetaHumanCharacter* Character,
-	// 	const FMetaHumanCharacterGeneratedAssets& Assets,
-	// 	const FString& PackagePath,
-	// 	const FString& BlueprintName);
 };

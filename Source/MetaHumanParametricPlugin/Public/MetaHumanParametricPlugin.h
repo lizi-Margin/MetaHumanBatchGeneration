@@ -44,6 +44,11 @@ private:
 	static void OnLoginToCloudServices();
 	static void OnTestAuthentication();
 
+	/** Batch Generation callbacks */
+	static void OnStartBatchGeneration();
+	static void OnStopBatchGeneration();
+	static void OnCheckBatchStatus();
+
 private:
 	// Store the last generated character for the two-step workflow
 	// Note: These are defined in the .cpp file

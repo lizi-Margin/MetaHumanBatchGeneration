@@ -27,6 +27,7 @@ public class MetaHumanParametricPlugin : ModuleRules
 				"CoreUObject",
 				"Engine",
 				"UnrealEd",
+				"EditorSubsystem",              // UEditorSubsystem base class
 
 				// MetaHuman 核心模块
 				"MetaHumanCharacter",           // UMetaHumanCharacter
