@@ -11,6 +11,7 @@
 #include "MetaHumanCollection.h"
 #include "MetaHumanBodyType.h"
 #include "MetaHumanAssetIOUtility.h"
+#include "MetaHumanAssemblyPipelineManager.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/SavePackage.h"
@@ -32,7 +33,8 @@ UMetaHumanCharacterEditorSubsystem* UMetaHumanParametricGenerator::getEditorSubs
 	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = nullptr;
 	if (IsInGameThread())
 	{
-		EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+		// EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+		EditorSubsystem = UMetaHumanCharacterEditorSubsystem::Get();
 		return EditorSubsystem;
 	}
 	else
@@ -113,33 +115,37 @@ bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Step 4/6] ✓ Texture source data download completed"));
 
-	// Step 4.5: Rig character
-	UE_LOG(LogTemp, Log, TEXT("[Step 4.5/6] Rigging character..."));
-	if (!RigCharacter(Character))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Warning: Failed to rig character"));
-		// return false;
-	}
-	UE_LOG(LogTemp, Log, TEXT("[Step 4/6] ✓ Texture source data download completed"));
+	UE_LOG(LogTemp, Log, TEXT("[Step 4.5/6] AutoRig "));
+	// if (!RigCharacter(Character))
+	// {
+	// 	UE_LOG(LogTemp, Warning, TEXT("Warning: Failed to rig character"));
+	// 	// return false;
+	// }
+	// UE_LOG(LogTemp, Log, TEXT("[Step 4.5/6] ✓ Character rigging completed"));
 
-	// Step 5: Generate assets
-	UE_LOG(LogTemp, Log, TEXT("[Step 5/6] Generating character assets..."));
-	FMetaHumanCharacterGeneratedAssets GeneratedAssets;
-	if (!GenerateCharacterAssets(Character, GeneratedAssets))
+	// Step 5: Assemble character using native pipeline (replaces old GenerateCharacterAssets + SaveCharacterAssets)
+	UE_LOG(LogTemp, Log, TEXT("[Step 5/5] Assembling character with native pipeline..."));
+
+	// Create build parameters using the assembly pipeline manager
+	FMetaHumanAssemblyBuildParameters BuildParams =
+		UMetaHumanAssemblyPipelineManager::CreateDefaultBuildParameters(
+			Character,
+			BodyConfig.QualityLevel,
+			OutputPath
+		);
+
+	// Build the character using the native assembly pipeline
+	// This is the same pipeline the Editor GUI uses, ensuring full ABP animation binding support
+	if (!UMetaHumanAssemblyPipelineManager::BuildMetaHumanCharacter(Character, BuildParams))
 	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to generate character assets!"));
+		UE_LOG(LogTemp, Error, TEXT("Failed to assemble character with native pipeline!"));
 		return false;
 	}
-	UE_LOG(LogTemp, Log, TEXT("[Step 5/6] ✓ Assets generated: Face Mesh, Body Mesh, Textures, Physics"));
 
-	// Step 6: Save assets
-	UE_LOG(LogTemp, Log, TEXT("[Step 6/6] Saving character assets..."));
-	if (!SaveCharacterAssets(Character, OutputPath, GeneratedAssets))
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to save character assets!"));
-		return false;
-	}
-	UE_LOG(LogTemp, Log, TEXT("[Step 6/6] ✓ Assets saved to: %s"), *OutputPath);
+	UE_LOG(LogTemp, Log, TEXT("[Step 5/5] ✓ Character assembled successfully with native pipeline"));
+	UE_LOG(LogTemp, Log, TEXT("  Quality Level: %s"), *UEnum::GetValueAsString(BodyConfig.QualityLevel));
+	UE_LOG(LogTemp, Log, TEXT("  Output Path: %s"), *OutputPath);
+	UE_LOG(LogTemp, Log, TEXT("  The character now has full ABP animation support!"));
 
 	OutCharacter = Character;
 	UE_LOG(LogTemp, Log, TEXT("=== MetaHuman Generation Completed Successfully ==="));
@@ -189,9 +195,11 @@ UMetaHumanCharacter* UMetaHumanParametricGenerator::CreateBaseCharacter(
 		EditorSubsystem->InitializeMetaHumanCharacter(Character);
 
 		// Register character for editing
-		if (!EditorSubsystem->TryAddObjectToEdit(Character))
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Failed to register character for editing, but continuing..."));
+		if (!EditorSubsystem->IsObjectAddedForEditing(Character)) {
+			if (!EditorSubsystem->TryAddObjectToEdit(Character))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Failed to register character for editing, but continuing..."));
+			}
 		}
 	}
 	else
@@ -360,8 +368,12 @@ bool UMetaHumanParametricGenerator::ConfigureAppearance(
 }
 
 // ============================================================================
-// Step 4: Generate Character Assets
+// Step 4: Generate Character Assets (Legacy/Utility Function)
 // ============================================================================
+// NOTE: This function is kept for backward compatibility and utility purposes
+// (e.g., ExportCharacterToBlueprint still uses it).
+// For production character assembly with full ABP support, use
+// UMetaHumanAssemblyPipelineManager::BuildMetaHumanCharacter instead.
 
 bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
 	UMetaHumanCharacter* Character,
@@ -438,8 +450,12 @@ bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
 }
 
 // ============================================================================
-// Step 5: Save Assets
+// Step 5: Save Assets (Legacy/Utility Function)
 // ============================================================================
+// NOTE: This function is kept for backward compatibility and utility purposes.
+// For production character assembly with full ABP support, use
+// UMetaHumanAssemblyPipelineManager::BuildMetaHumanCharacter instead,
+// which handles all asset creation and saving through the native pipeline.
 
 bool UMetaHumanParametricGenerator::SaveCharacterAssets(
 	UMetaHumanCharacter* Character,
@@ -492,153 +508,156 @@ bool UMetaHumanParametricGenerator::SaveCharacterAssets(
 		UE_LOG(LogTemp, Error, TEXT("Failed to get editor subsystem"));
 		return false;
 	}
-	EditorSubsystem->RemoveObjectToEdit(Character);
-	UE_LOG(LogTemp, Log, TEXT("  ✓ Removed character from edit: %s"), *CharacterFilePath);
+	if (UMetaHumanCharacterEditorSubsystem::Get()->IsObjectAddedForEditing(Character))
+	{
+		EditorSubsystem->RemoveObjectToEdit(Character);
+		UE_LOG(LogTemp, Log, TEXT("  ✓ Removed character from edit: %s"), *CharacterFilePath);
+	}
 	return true;
 }
 
-// ============================================================================
-// Export to Blueprint
-// ============================================================================
+// // ============================================================================
+// // Export to Blueprint
+// // ============================================================================
 
-UBlueprint* UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
-	UMetaHumanCharacter* Character,
-	const FString& BlueprintPath,
-	const FString& BlueprintName)
-{
-	if (!Character)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Invalid character for blueprint export"));
-		return nullptr;
-	}
+// UBlueprint* UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
+// 	UMetaHumanCharacter* Character,
+// 	const FString& BlueprintPath,
+// 	const FString& BlueprintName)
+// {
+// 	if (!Character)
+// 	{
+// 		UE_LOG(LogTemp, Error, TEXT("Invalid character for blueprint export"));
+// 		return nullptr;
+// 	}
 
-	UE_LOG(LogTemp, Log, TEXT("=== Exporting Character to Blueprint ==="));
-	UE_LOG(LogTemp, Log, TEXT("Blueprint: %s/%s"), *BlueprintPath, *BlueprintName);
+// 	UE_LOG(LogTemp, Log, TEXT("=== Exporting Character to Blueprint ==="));
+// 	UE_LOG(LogTemp, Log, TEXT("Blueprint: %s/%s"), *BlueprintPath, *BlueprintName);
 
-	// 1. First generate character assets
-	FMetaHumanCharacterGeneratedAssets GeneratedAssets;
-	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+// 	// 1. First generate character assets
+// 	FMetaHumanCharacterGeneratedAssets GeneratedAssets;
+// 	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
 
-	if (!EditorSubsystem || !EditorSubsystem->TryGenerateCharacterAssets(Character, GetTransientPackage(), GeneratedAssets))
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to generate assets for blueprint export"));
-		return nullptr;
-	}
+// 	if (!EditorSubsystem || !EditorSubsystem->TryGenerateCharacterAssets(Character, GetTransientPackage(), GeneratedAssets))
+// 	{
+// 		UE_LOG(LogTemp, Error, TEXT("Failed to generate assets for blueprint export"));
+// 		return nullptr;
+// 	}
 
-	// 2. Create blueprint
-	UBlueprint* Blueprint = CreateBlueprintFromCharacter(
-		Character,
-		GeneratedAssets,
-		BlueprintPath,
-		BlueprintName
-	);
+// 	// 2. Create blueprint
+// 	UBlueprint* Blueprint = CreateBlueprintFromCharacter(
+// 		Character,
+// 		GeneratedAssets,
+// 		BlueprintPath,
+// 		BlueprintName
+// 	);
 
-	if (Blueprint)
-	{
-		UE_LOG(LogTemp, Log, TEXT("✓ Blueprint created successfully: %s"), *Blueprint->GetPathName());
-	}
+// 	if (Blueprint)
+// 	{
+// 		UE_LOG(LogTemp, Log, TEXT("✓ Blueprint created successfully: %s"), *Blueprint->GetPathName());
+// 	}
 
-	return Blueprint;
-}
+// 	return Blueprint;
+// }
 
-// ============================================================================
-// Helper Function: Create Blueprint
-// ============================================================================
+// // ============================================================================
+// // Helper Function: Create Blueprint
+// // ============================================================================
 
-UBlueprint* UMetaHumanParametricGenerator::CreateBlueprintFromCharacter(
-	UMetaHumanCharacter* Character,
-	const FMetaHumanCharacterGeneratedAssets& Assets,
-	const FString& PackagePath,
-	const FString& BlueprintName)
-{
-	// 1. Create blueprint package
-	FString PackageNameStr = FPackageName::ObjectPathToPackageName(PackagePath / BlueprintName);
-	UPackage* Package = CreatePackage(*PackageNameStr);
+// UBlueprint* UMetaHumanParametricGenerator::CreateBlueprintFromCharacter(
+// 	UMetaHumanCharacter* Character,
+// 	const FMetaHumanCharacterGeneratedAssets& Assets,
+// 	const FString& PackagePath,
+// 	const FString& BlueprintName)
+// {
+// 	// 1. Create blueprint package
+// 	FString PackageNameStr = FPackageName::ObjectPathToPackageName(PackagePath / BlueprintName);
+// 	UPackage* Package = CreatePackage(*PackageNameStr);
 
-	if (!Package)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to create blueprint package"));
-		return nullptr;
-	}
+// 	if (!Package)
+// 	{
+// 		UE_LOG(LogTemp, Error, TEXT("Failed to create blueprint package"));
+// 		return nullptr;
+// 	}
 
-	// 2. Create Actor blueprint
-	UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(
-		AActor::StaticClass(),
-		Package,
-		*BlueprintName,
-		BPTYPE_Normal,
-		UBlueprint::StaticClass(),
-		UBlueprintGeneratedClass::StaticClass(),
-		NAME_None
-	);
+// 	// 2. Create Actor blueprint
+// 	UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(
+// 		AActor::StaticClass(),
+// 		Package,
+// 		*BlueprintName,
+// 		BPTYPE_Normal,
+// 		UBlueprint::StaticClass(),
+// 		UBlueprintGeneratedClass::StaticClass(),
+// 		NAME_None
+// 	);
 
-	if (!Blueprint)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to create blueprint"));
-		return nullptr;
-	}
+// 	if (!Blueprint)
+// 	{
+// 		UE_LOG(LogTemp, Error, TEXT("Failed to create blueprint"));
+// 		return nullptr;
+// 	}
 
-	// 3. Add skeletal mesh components
-	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
-	if (!SCS)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Blueprint has no SimpleConstructionScript"));
-		return nullptr;
-	}
+// 	// 3. Add skeletal mesh components
+// 	USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
+// 	if (!SCS)
+// 	{
+// 		UE_LOG(LogTemp, Error, TEXT("Blueprint has no SimpleConstructionScript"));
+// 		return nullptr;
+// 	}
 
-	// Add face mesh component
-	if (Assets.FaceMesh)
-	{
-		USCS_Node* FaceNode = SCS->CreateNode(USkeletalMeshComponent::StaticClass(), TEXT("FaceMesh"));
-		USkeletalMeshComponent* FaceComp = Cast<USkeletalMeshComponent>(FaceNode->ComponentTemplate);
-		if (FaceComp)
-		{
-			FaceComp->SetSkeletalMesh(Assets.FaceMesh);
-			FaceComp->SetRelativeLocation(FVector(0, 0, 0));
-			SCS->AddNode(FaceNode);
-			UE_LOG(LogTemp, Log, TEXT("  + Added Face Mesh component"));
-		}
-	}
+// 	// Add face mesh component
+// 	if (Assets.FaceMesh)
+// 	{
+// 		USCS_Node* FaceNode = SCS->CreateNode(USkeletalMeshComponent::StaticClass(), TEXT("FaceMesh"));
+// 		USkeletalMeshComponent* FaceComp = Cast<USkeletalMeshComponent>(FaceNode->ComponentTemplate);
+// 		if (FaceComp)
+// 		{
+// 			FaceComp->SetSkeletalMesh(Assets.FaceMesh);
+// 			FaceComp->SetRelativeLocation(FVector(0, 0, 0));
+// 			SCS->AddNode(FaceNode);
+// 			UE_LOG(LogTemp, Log, TEXT("  + Added Face Mesh component"));
+// 		}
+// 	}
 
-	// Add body mesh component
-	if (Assets.BodyMesh)
-	{
-		USCS_Node* BodyNode = SCS->CreateNode(USkeletalMeshComponent::StaticClass(), TEXT("BodyMesh"));
-		USkeletalMeshComponent* BodyComp = Cast<USkeletalMeshComponent>(BodyNode->ComponentTemplate);
-		if (BodyComp)
-		{
-			BodyComp->SetSkeletalMesh(Assets.BodyMesh);
-			BodyComp->SetRelativeLocation(FVector(0, 0, -90));  // Slightly offset body downward
-			SCS->AddNode(BodyNode);
-			UE_LOG(LogTemp, Log, TEXT("  + Added Body Mesh component"));
-		}
-	}
+// 	// Add body mesh component
+// 	if (Assets.BodyMesh)
+// 	{
+// 		USCS_Node* BodyNode = SCS->CreateNode(USkeletalMeshComponent::StaticClass(), TEXT("BodyMesh"));
+// 		USkeletalMeshComponent* BodyComp = Cast<USkeletalMeshComponent>(BodyNode->ComponentTemplate);
+// 		if (BodyComp)
+// 		{
+// 			BodyComp->SetSkeletalMesh(Assets.BodyMesh);
+// 			BodyComp->SetRelativeLocation(FVector(0, 0, -90));  // Slightly offset body downward
+// 			SCS->AddNode(BodyNode);
+// 			UE_LOG(LogTemp, Log, TEXT("  + Added Body Mesh component"));
+// 		}
+// 	}
 
-	// 4. Compile blueprint
-	FKismetEditorUtilities::CompileBlueprint(Blueprint);
+// 	// 4. Compile blueprint
+// 	FKismetEditorUtilities::CompileBlueprint(Blueprint);
 
-	// 5. Save blueprint
-	FString BlueprintFilePath = FPackageName::LongPackageNameToFilename(
-		Package->GetName(),
-		FPackageName::GetAssetPackageExtension()
-	);
+// 	// 5. Save blueprint
+// 	FString BlueprintFilePath = FPackageName::LongPackageNameToFilename(
+// 		Package->GetName(),
+// 		FPackageName::GetAssetPackageExtension()
+// 	);
 
-	FSavePackageArgs SaveArgs;
-	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
-	SaveArgs.SaveFlags = SAVE_NoError;
+// 	FSavePackageArgs SaveArgs;
+// 	SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+// 	SaveArgs.SaveFlags = SAVE_NoError;
 
-	if (!UPackage::SavePackage(Package, Blueprint, *BlueprintFilePath, SaveArgs))
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to save blueprint package"));
-		return nullptr;
-	}
+// 	if (!UPackage::SavePackage(Package, Blueprint, *BlueprintFilePath, SaveArgs))
+// 	{
+// 		UE_LOG(LogTemp, Error, TEXT("Failed to save blueprint package"));
+// 		return nullptr;
+// 	}
 
-	// 6. Register to Asset Registry
-	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-	AssetRegistryModule.Get().AssetCreated(Blueprint);
+// 	// 6. Register to Asset Registry
+// 	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+// 	AssetRegistryModule.Get().AssetCreated(Blueprint);
 
-	return Blueprint;
-}
+// 	return Blueprint;
+// }
 
 // ============================================================================
 // Helper Function: Convert Measurements to Constraints
@@ -795,81 +814,130 @@ bool UMetaHumanParametricGenerator::RigCharacter(UMetaHumanCharacter* Character)
 	// Get current rigging state
 	EMetaHumanCharacterRigState RigState = EditorSubsystem->GetRiggingState(Character);
 
-	if (RigState == EMetaHumanCharacterRigState::Unrigged)
-	{
-		UE_LOG(LogTemp, Log, TEXT("Character is not rigged, performing autorig with retry logic..."));
-
-		// Retry autorig up to 5 times in case of network errors
-		bool bAutorigSucceeded = false;
-
-		// see Engine\Plugins\MetaHuman\MetaHumanCharacter\Source\MetaHumanCharacterEditor\Private\MetaHumanCharacterEditorToolkit.cpp line 910 AutoRigFace
-		check(Character->IsCharacterValid())
-		if (Character->HasFaceDNA())
-		{
-			Character->Modify();
-			EditorSubsystem->RemoveFaceRig(Character);
-			UE_LOG(LogTemp, Log, TEXT("Removed old face rig from character"));
-		}
-
-		// Execute auto-rigging
-		UE_LOG(LogTemp, Log, TEXT("Starting autorig..."));
-		EditorSubsystem->AutoRigFace(Character, UE::MetaHuman::ERigType::JointsAndBlendshapes);
-
-		// Wait for auto-rigging to complete
-		const float AutorigStartTime = FPlatformTime::Seconds();
-		const float MaxWaitTime = 120.0f;
-		float LastAutorigProgress = 0.0f;
-
-		while (EditorSubsystem->IsAutoRiggingFace(Character))
-		{
-			const float AutorigElapsedTime = FPlatformTime::Seconds() - AutorigStartTime;
-
-			// Report progress every 15 seconds
-			if (AutorigElapsedTime - LastAutorigProgress > 15.0f)
-			{
-				UE_LOG(LogTemp, Log, TEXT("Autorig in progress... (%.1f seconds elapsed)"), AutorigElapsedTime);
-				LastAutorigProgress = AutorigElapsedTime;
-			}
-			if (AutorigElapsedTime > MaxWaitTime)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("Autorig operation timed out after %.1f seconds, won't wait anymore"), AutorigElapsedTime);
-				break;
-			}
-			// In background thread, no need to manually handle tick
-			FPlatformProcess::Sleep(1.0f); // Longer sleep time because this is a background operation
-		}
-
-		const float AutorigTotalTime = FPlatformTime::Seconds() - AutorigStartTime;
-		UE_LOG(LogTemp, Log, TEXT("Autorig operation took %.1f seconds"), AutorigTotalTime);
-		
-		// Check rigging state after this attempt
-		RigState = EditorSubsystem->GetRiggingState(Character);
-		if (RigState == EMetaHumanCharacterRigState::Rigged)
-		{
-			bAutorigSucceeded = true;
-			UE_LOG(LogTemp, Log, TEXT("✓ Character successfully rigged"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("✗ Autorig attempt failed (character not rigged)"));
-		}
-	
-
-		// Final check after all retries
-		if (!bAutorigSucceeded)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Warning: Character still not riggedt"));
-			return false;
-		}
-		else
-		{
-			return true;
-		}
-	}
-	else
+	if (RigState == EMetaHumanCharacterRigState::Rigged)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Character is already rigged, skipping autorig"));
 		return true;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Character is not rigged, performing autorig..."));
+
+	// See Engine\Plugins\MetaHuman\MetaHumanCharacter\Source\MetaHumanCharacterEditor\Private\MetaHumanCharacterEditorToolkit.cpp line 910 AutoRigFace
+	check(Character->IsCharacterValid());
+	if (Character->HasFaceDNA())
+	{
+		Character->Modify();
+		EditorSubsystem->RemoveFaceRig(Character);
+		UE_LOG(LogTemp, Log, TEXT("Removed old face rig from character"));
+	}
+
+	// Setup completion tracking using a delegate
+	bool bRiggingComplete = false;
+	bool bRiggingSucceeded = false;
+	FDelegateHandle RiggingStateChangedHandle;
+
+	// Lambda to track rig completion
+	auto OnRiggingStateChangedLambda = [&bRiggingComplete, &bRiggingSucceeded, Character](TNotNull<const UMetaHumanCharacter*> InCharacter, EMetaHumanCharacterRigState NewState)
+	{
+		if (InCharacter == Character)
+		{
+			const TCHAR* StateString = TEXT("Unknown");
+			switch (NewState)
+			{
+				case EMetaHumanCharacterRigState::Unrigged: StateString = TEXT("Unrigged"); break;
+				case EMetaHumanCharacterRigState::RigPending: StateString = TEXT("RigPending"); break;
+				case EMetaHumanCharacterRigState::Rigged: StateString = TEXT("Rigged"); break;
+			}
+			UE_LOG(LogTemp, Log, TEXT("Rigging state changed: %s"), StateString);
+
+			if (NewState == EMetaHumanCharacterRigState::Rigged)
+			{
+				bRiggingComplete = true;
+				bRiggingSucceeded = true;
+				UE_LOG(LogTemp, Log, TEXT("✓ AutoRig completed successfully"));
+			}
+			else if (NewState == EMetaHumanCharacterRigState::Unrigged)
+			{
+				// If it goes back to Unrigged after RigPending, that means it failed
+				bRiggingComplete = true;
+				bRiggingSucceeded = false;
+				UE_LOG(LogTemp, Error, TEXT("✗ AutoRig failed (returned to Unrigged state)"));
+			}
+		}
+	};
+
+	// Register delegate BEFORE starting autorig
+	RiggingStateChangedHandle = EditorSubsystem->OnRiggingStateChanged.AddLambda(OnRiggingStateChangedLambda);
+
+	// Execute auto-rigging (asynchronous operation)
+	UE_LOG(LogTemp, Log, TEXT("Starting autorig (async operation)..."));
+	EditorSubsystem->AutoRigFace(Character, UE::MetaHuman::ERigType::JointsAndBlendshapes);
+
+	// Wait for completion with timeout
+	const float AutorigStartTime = FPlatformTime::Seconds();
+	const float MaxWaitTime = 180.0f; // Increase to 3 minutes for network operations
+	float LastProgressReport = 0.0f;
+
+	while (!bRiggingComplete)
+	{
+		const float ElapsedTime = FPlatformTime::Seconds() - AutorigStartTime;
+
+		// Report progress every 15 seconds
+		if (ElapsedTime - LastProgressReport > 15.0f)
+		{
+			UE_LOG(LogTemp, Log, TEXT("Autorig in progress... (%.1f seconds elapsed)"), ElapsedTime);
+			UE_LOG(LogTemp, Log, TEXT("  Waiting for cloud service response..."));
+			LastProgressReport = ElapsedTime;
+		}
+
+		if (ElapsedTime > MaxWaitTime)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Autorig operation timed out after %.1f seconds"), ElapsedTime);
+			UE_LOG(LogTemp, Warning, TEXT("  The operation may still complete in the background"));
+			break;
+		}
+
+		// Tick the editor to process callbacks
+		// This is critical: without this, HTTP response callbacks won't be processed!
+		if (GEditor)
+		{
+			GEditor->Tick(0.1f, false);
+		}
+
+		// UnrealEditor_Core
+		// UnrealEditor_Engine
+		// UnrealEditor_UnrealEd
+		// UnrealEditor_UnrealEd
+		// UnrealEditor_MetaHumanParametricPlugin!UMetaHumanParametricGenerator::RigCharacter() [C:\Users\hulc\Desktop\MH_header\MH_header\Plugins\MetaHumanParametricPlugin\Source\MetaHumanParametricPlugin\Private\MetaHumanParametricGenerator.cpp:909]
+		// UnrealEditor_MetaHumanParametricPlugin!UMetaHumanParametricGenerator::GenerateParametricMetaHuman() [C:\Users\hulc\Desktop\MH_header\MH_header\Plugins\MetaHumanParametricPlugin\Source\MetaHumanParametricPlugin\Private\MetaHumanParametricGenerator.cpp:120]
+		// UnrealEditor_MetaHumanParametricPlugin!Example1_CreateSlenderFemale() [C:\Users\hulc\Desktop\MH_header\MH_header\Plugins\MetaHumanParametricPlugin\Source\MetaHumanParametricPlugin\Private\MetaHumanParametricGenerator_Examples.cpp:47]
+		// UnrealEditor_MetaHumanParametricPlugin!FMetaHumanParametricPluginModule::OnGenerateSlenderFemale() [C:\Users\hulc\Desktop\MH_header\MH_header\Plugins\MetaHumanParametricPlugin\Source\MetaHumanParametricPlugin\Private\MetaHumanParametricPlugin.cpp:161]
+		// UnrealEditor_MetaHumanParametricPlugin!TBaseStaticDelegateInstance<void __cdecl(void),FDefaultDelegateUserPolicy>::ExecuteIfSafe() [I:\UE_5.6\Engine\Source\Runtime\Core\Public\Delegates\DelegateInstancesImpl.h:801]
+		// UnrealEditor_Slate
+		// FPlatformProcess::Sleep(0.01f);
+	}
+
+	// Unregister delegate
+	EditorSubsystem->OnRiggingStateChanged.Remove(RiggingStateChangedHandle);
+
+	const float TotalTime = FPlatformTime::Seconds() - AutorigStartTime;
+	UE_LOG(LogTemp, Log, TEXT("Autorig operation took %.1f seconds"), TotalTime);
+
+	if (bRiggingComplete && bRiggingSucceeded)
+	{
+		UE_LOG(LogTemp, Log, TEXT("✓ Character successfully rigged"));
+		return true;
+	}
+	else if (!bRiggingComplete)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("✗ Autorig did not complete within timeout"));
+		UE_LOG(LogTemp, Warning, TEXT("  Check MetaHuman cloud services connection"));
+		return false;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("✗ Autorig failed"));
+		return false;
 	}
 }
 

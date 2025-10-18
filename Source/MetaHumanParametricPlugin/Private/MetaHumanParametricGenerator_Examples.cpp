@@ -56,17 +56,17 @@ void Example1_CreateSlenderFemale()
 	{
 		UE_LOG(LogTemp, Log, TEXT("✓ Character created successfully!"));
 
-		// 导出为蓝图
-		UBlueprint* Blueprint = UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
-			Character,
-			TEXT("/Game/MyMetaHumans/Blueprints/"),
-			TEXT("BP_SlenderFemale")
-		);
+		// // 导出为蓝图
+		// UBlueprint* Blueprint = UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
+		// 	Character,
+		// 	TEXT("/Game/MyMetaHumans/Blueprints/"),
+		// 	TEXT("BP_SlenderFemale")
+		// );
 
-		if (Blueprint)
-		{
-			UE_LOG(LogTemp, Log, TEXT("✓ Blueprint exported: %s"), *Blueprint->GetPathName());
-		}
+		// if (Blueprint)
+		// {
+		// 	UE_LOG(LogTemp, Log, TEXT("✓ Blueprint exported: %s"), *Blueprint->GetPathName());
+		// }
 	}
 	else
 	{
@@ -124,17 +124,17 @@ void Example2_CreateMuscularMale()
 	{
 		UE_LOG(LogTemp, Log, TEXT("✓ Character created successfully!"));
 
-		// 导出为蓝图
-		UBlueprint* Blueprint = UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
-			Character,
-			TEXT("/Game/MyMetaHumans/Blueprints/"),
-			TEXT("BP_MuscularMale")
-		);
+		// // 导出为蓝图
+		// UBlueprint* Blueprint = UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
+		// 	Character,
+		// 	TEXT("/Game/MyMetaHumans/Blueprints/"),
+		// 	TEXT("BP_MuscularMale")
+		// );
 
-		if (Blueprint)
-		{
-			UE_LOG(LogTemp, Log, TEXT("✓ Blueprint exported: %s"), *Blueprint->GetPathName());
-		}
+		// if (Blueprint)
+		// {
+		// 	UE_LOG(LogTemp, Log, TEXT("✓ Blueprint exported: %s"), *Blueprint->GetPathName());
+		// }
 	}
 }
 
@@ -188,17 +188,17 @@ void Example3_CreateShortRoundedCharacter()
 	{
 		UE_LOG(LogTemp, Log, TEXT("✓ Character created successfully!"));
 
-		// 导出为蓝图
-		UBlueprint* Blueprint = UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
-			Character,
-			TEXT("/Game/MyMetaHumans/Blueprints/"),
-			TEXT("BP_ShortRounded")
-		);
+		// // 导出为蓝图
+		// UBlueprint* Blueprint = UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
+		// 	Character,
+		// 	TEXT("/Game/MyMetaHumans/Blueprints/"),
+		// 	TEXT("BP_ShortRounded")
+		// );
 
-		if (Blueprint)
-		{
-			UE_LOG(LogTemp, Log, TEXT("✓ Blueprint exported: %s"), *Blueprint->GetPathName());
-		}
+		// if (Blueprint)
+		// {
+		// 	UE_LOG(LogTemp, Log, TEXT("✓ Blueprint exported: %s"), *Blueprint->GetPathName());
+		// }
 	}
 }
 
@@ -267,13 +267,13 @@ void Example4_BatchCreateCharacters()
 			SuccessCount++;
 			UE_LOG(LogTemp, Log, TEXT("  ✓ %s created"), *Preset.Name);
 
-			// 导出蓝图
-			FString BlueprintName = FString::Printf(TEXT("BP_%s"), *Preset.Name);
-			UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
-				Character,
-				TEXT("/Game/MyMetaHumans/Batch/Blueprints/"),
-				BlueprintName
-			);
+			// // 导出蓝图
+			// FString BlueprintName = FString::Printf(TEXT("BP_%s"), *Preset.Name);
+			// UMetaHumanParametricGenerator::ExportCharacterToBlueprint(
+			// 	Character,
+			// 	TEXT("/Game/MyMetaHumans/Batch/Blueprints/"),
+			// 	BlueprintName
+			// );
 		}
 		else
 		{

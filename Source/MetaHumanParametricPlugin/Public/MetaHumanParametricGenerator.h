@@ -65,6 +65,11 @@ struct FMetaHumanBodyParametricConfig
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Body Constraints")
 	TMap<FString, float> BodyMeasurements;  // 例如: {"Height": 175.0, "Chest": 95.0, "Waist": 70.0}
 
+	// 质量级别 (Cinematic, High, Medium, Low)
+	// 控制生成的角色资产的质量级别和管线配置
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Build Settings")
+	EMetaHumanQualityLevel QualityLevel = EMetaHumanQualityLevel::Cinematic;
+
 	FMetaHumanBodyParametricConfig()
 	{
 		// 默认身体测量值（单位：厘米）
@@ -144,19 +149,19 @@ public:
 		const FMetaHumanAppearanceConfig& AppearanceConfig,
 		UMetaHumanCharacter*& OutCharacter);
 
-	/**
-	 * 从创建的角色生成蓝图
-	 *
-	 * @param Character - 源角色资产
-	 * @param BlueprintPath - 蓝图保存路径
-	 * @param BlueprintName - 蓝图名称
-	 * @return 创建的蓝图资产
-	 */
-	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Export")
-	static UBlueprint* ExportCharacterToBlueprint(
-		UMetaHumanCharacter* Character,
-		const FString& BlueprintPath,
-		const FString& BlueprintName);
+	// /**
+	//  * 从创建的角色生成蓝图
+	//  *
+	//  * @param Character - 源角色资产
+	//  * @param BlueprintPath - 蓝图保存路径
+	//  * @param BlueprintName - 蓝图名称
+	//  * @return 创建的蓝图资产
+	//  */
+	// UFUNCTION(BlueprintCallable, Category = "MetaHuman|Export")
+	// static UBlueprint* ExportCharacterToBlueprint(
+	// 	UMetaHumanCharacter* Character,
+	// 	const FString& BlueprintPath,
+	// 	const FString& BlueprintName);
 
 	// ============================================================================
 	// MetaHuman Cloud Services Authentication (新增)
@@ -228,9 +233,11 @@ private:
 	static bool DownloadTextureSourceData(UMetaHumanCharacter* Character);
 
 	/**
-	 * 对角色进行 rigging
+	 * 对角色进行 rigging (异步版本)
+	 * @param Character - 需要 rigging 的角色
+	 * @param OnComplete - 完成时的回调函数，参数为是否成功
 	 */
-	static bool RigCharacter(UMetaHumanCharacter* Character);
+	static void RigCharacterAsync(UMetaHumanCharacter* Character, TFunction<void(bool)> OnComplete);
 
 private:
 	/**
@@ -263,9 +270,9 @@ private:
 	/**
 	 * 辅助：创建蓝图并设置组件
 	 */
-	static UBlueprint* CreateBlueprintFromCharacter(
-		UMetaHumanCharacter* Character,
-		const FMetaHumanCharacterGeneratedAssets& Assets,
-		const FString& PackagePath,
-		const FString& BlueprintName);
+	// static UBlueprint* CreateBlueprintFromCharacter(
+	// 	UMetaHumanCharacter* Character,
+	// 	const FMetaHumanCharacterGeneratedAssets& Assets,
+	// 	const FString& PackagePath,
+	// 	const FString& BlueprintName);
 };
