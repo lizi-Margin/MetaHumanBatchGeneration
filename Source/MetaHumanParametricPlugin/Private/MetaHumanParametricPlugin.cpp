@@ -416,7 +416,7 @@ void FMetaHumanParametricPluginModule::OnStep1PrepareAndRig()
 	FMetaHumanAppearanceConfig AppearanceConfig;
 
 	FString CharacterName = TEXT("TwoStepTest");
-	FString OutputPath = TEXT("/Game/MetaHumans/");
+	FString OutputPath = TEXT("/Game/MetaHumans");
 
 	UMetaHumanCharacter* Character = nullptr;
 	bool bSuccess = UMetaHumanParametricGenerator::PrepareAndRigCharacter(
