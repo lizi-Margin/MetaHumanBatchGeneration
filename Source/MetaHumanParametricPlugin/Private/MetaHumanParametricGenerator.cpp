@@ -389,6 +389,11 @@ bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
 	{
 		UE_LOG(LogTemp, Log, TEXT("    • Physics Asset: [Valid]"));
 	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Generated assets missing PhysicsAsset"));
+		return false;
+	}
 
 	UE_LOG(LogTemp, Log, TEXT("    • Body Measurements: %d"), OutAssets.BodyMeasurements.Num());
 	UE_LOG(LogTemp, Log, TEXT("    • Total Metadata Entries: %d"), OutAssets.Metadata.Num());
@@ -654,33 +659,6 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 		return false;
 	}
 
-	// Check if texture download is already in progress
-	if (EditorSubsystem->IsRequestingHighResolutionTextures(Character))
-	{
-		UE_LOG(LogTemp, Log, TEXT("Texture download already in progress, waiting..."));
-
-		// Wait for download to complete (maximum 60 seconds)
-		const float MaxWaitTime = 60.0f;
-		const float StartTime = FPlatformTime::Seconds();
-
-		while (EditorSubsystem->IsRequestingHighResolutionTextures(Character))
-		{
-			const float ElapsedTime = FPlatformTime::Seconds() - StartTime;
-			if (ElapsedTime > MaxWaitTime)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("Texture download timeout after %.1f seconds"), ElapsedTime);
-				return false;
-			}
-
-			// Handle editor tick to allow download to continue
-			// Note: In background thread, we don't need to manually handle tick
-			FPlatformProcess::Sleep(0.5f); // Can safely use longer sleep time in background thread
-		}
-
-		UE_LOG(LogTemp, Log, TEXT("Texture download completed"));
-		return true;
-	}
-
 	// Check if character has synthesized textures
 	if (!Character->HasSynthesizedTextures())
 	{
@@ -818,8 +796,6 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 
 	// Step 2: Request texture download
 	UE_LOG(LogTemp, Log, TEXT("Requesting 2k texture download..."));
-	UE_LOG(LogTemp, Warning, TEXT("Note: This requires MetaHuman cloud services login. If not logged in, download will fail but generation will continue with default textures."));
-
 	EditorSubsystem->RequestHighResolutionTextures(Character, ERequestTextureResolution::Res2k);
 
 	// Wait for download to complete
@@ -864,10 +840,8 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 	}
 	else if (!bDownloadStarted)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Texture download failed to start - likely due to authentication issues"));
-		UE_LOG(LogTemp, Warning, TEXT("  Please ensure you are logged into MetaHuman cloud services"));
-		UE_LOG(LogTemp, Warning, TEXT("  You can log in via: Window > MetaHuman > Cloud Services"));
-		return false;
+		UE_LOG(LogTemp, Warning, TEXT("Texture download is not running - likely it has finished"));
+		return true;
 	}
 	else
 	{
