@@ -16,6 +16,11 @@ extern void Example3_CreateShortRoundedCharacter();
 extern void Example4_BatchCreateCharacters();
 extern void Example_PluginTest();
 
+// Define static member variables for two-step workflow
+UMetaHumanCharacter* FMetaHumanParametricPluginModule::LastGeneratedCharacter = nullptr;
+FString FMetaHumanParametricPluginModule::LastOutputPath = TEXT("");
+EMetaHumanQualityLevel FMetaHumanParametricPluginModule::LastQualityLevel = EMetaHumanQualityLevel::Cinematic;
+
 void FMetaHumanParametricPluginModule::StartupModule()
 {
 	UE_LOG(LogTemp, Log, TEXT("MetaHumanParametricPlugin module has been loaded"));
@@ -51,10 +56,50 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 	FToolMenuSection& Section = Menu->FindOrAddSection("MetaHumanGenerator");
 	Section.Label = LOCTEXT("MetaHumanGenerator", "MetaHuman Generator");
 
+	// Add Two-Step Workflow submenu (New!)
+	Section.AddSubMenu(
+		"MetaHumanTwoStep",
+		LOCTEXT("MetaHumanTwoStepLabel", "Two-Step Workflow (Recommended)"),
+		LOCTEXT("MetaHumanTwoStepTooltip", "Non-blocking character generation using two-step approach"),
+		FNewToolMenuDelegate::CreateLambda([](UToolMenu* SubMenu)
+		{
+			FToolMenuSection& TwoStepSection = SubMenu->AddSection("TwoStep", LOCTEXT("TwoStep", "Two-Step Generation"));
+
+			// Step 1: Prepare & Rig
+			TwoStepSection.AddMenuEntry(
+				"Step1PrepareRig",
+				LOCTEXT("Step1PrepareRigLabel", "Step 1: Prepare & Rig Character"),
+				LOCTEXT("Step1PrepareRigTooltip", "Create character, configure, and start AutoRig (returns immediately)"),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnStep1PrepareAndRig))
+			);
+
+			// Check Status
+			TwoStepSection.AddMenuEntry(
+				"CheckStatus",
+				LOCTEXT("CheckStatusLabel", "Check Rigging Status"),
+				LOCTEXT("CheckStatusTooltip", "Check if AutoRig is complete"),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnCheckRiggingStatus))
+			);
+
+			// Step 2: Assemble
+			TwoStepSection.AddMenuEntry(
+				"Step2Assemble",
+				LOCTEXT("Step2AssembleLabel", "Step 2: Assemble Character"),
+				LOCTEXT("Step2AssembleTooltip", "Assemble character after AutoRig completes"),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnStep2Assemble))
+			);
+		}),
+		false,
+		FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Details")
+	);
+
 	Section.AddSubMenu(
 		"MetaHumanExamples",
-		LOCTEXT("MetaHumanExamplesLabel", "MetaHuman Examples"),
-		LOCTEXT("MetaHumanExamplesTooltip", "Generate example MetaHuman characters"),
+		LOCTEXT("MetaHumanExamplesLabel", "Legacy Examples (Blocking)"),
+		LOCTEXT("MetaHumanExamplesTooltip", "Generate example MetaHuman characters (runs in background thread)"),
 		FNewToolMenuDelegate::CreateLambda([](UToolMenu* SubMenu)
 		{
 			FToolMenuSection& SubSection = SubMenu->AddSection("Examples", LOCTEXT("Examples", "Character Examples"));
@@ -344,6 +389,135 @@ void FMetaHumanParametricPluginModule::OnTestAuthentication()
 	FNotificationInfo CompletedInfo(LOCTEXT("AuthTestStarted", "Authentication test started - watch Output Log for results"));
 	CompletedInfo.ExpireDuration = 5.0f;
 	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+}
+
+// ============================================================================
+// Two-Step Workflow Callbacks
+// ============================================================================
+
+void FMetaHumanParametricPluginModule::OnStep1PrepareAndRig()
+{
+	UE_LOG(LogTemp, Warning, TEXT("=== Two-Step Workflow: Step 1 - Prepare & Rig ==="));
+
+	FNotificationInfo Info(LOCTEXT("Step1Starting", "Step 1: Preparing and starting AutoRig..."));
+	Info.ExpireDuration = 3.0f;
+	FSlateNotificationManager::Get().AddNotification(Info);
+
+	// Create a slender female character as example
+	FMetaHumanBodyParametricConfig BodyConfig;
+	BodyConfig.BodyType = EMetaHumanBodyType::f_med_nrw;
+	BodyConfig.GlobalDeltaScale = 1.0f;
+	BodyConfig.bUseParametricBody = true;
+	BodyConfig.BodyMeasurements.Add(TEXT("Height"), 168.0f);
+	BodyConfig.BodyMeasurements.Add(TEXT("Waist"), 62.0f);
+	BodyConfig.BodyMeasurements.Add(TEXT("Chest"), 85.0f);
+	BodyConfig.QualityLevel = EMetaHumanQualityLevel::Cinematic;
+
+	FMetaHumanAppearanceConfig AppearanceConfig;
+
+	FString CharacterName = TEXT("TwoStepTest");
+	FString OutputPath = TEXT("/Game/MetaHumans/");
+
+	UMetaHumanCharacter* Character = nullptr;
+	bool bSuccess = UMetaHumanParametricGenerator::PrepareAndRigCharacter(
+		CharacterName,
+		OutputPath,
+		BodyConfig,
+		AppearanceConfig,
+		Character
+	);
+
+	if (bSuccess && Character)
+	{
+		// Store for Step 2
+		LastGeneratedCharacter = Character;
+		LastOutputPath = OutputPath;
+		LastQualityLevel = BodyConfig.QualityLevel;
+
+		UE_LOG(LogTemp, Log, TEXT("✓ Step 1 Complete - AutoRig is running in background"));
+		UE_LOG(LogTemp, Log, TEXT("Character stored: %s"), *Character->GetName());
+
+		FNotificationInfo SuccessInfo(LOCTEXT("Step1Complete", "✓ Step 1 Complete! AutoRig running in background. Use 'Check Status' to monitor."));
+		SuccessInfo.ExpireDuration = 7.0f;
+		FSlateNotificationManager::Get().AddNotification(SuccessInfo);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("✗ Step 1 Failed!"));
+
+		FNotificationInfo ErrorInfo(LOCTEXT("Step1Failed", "✗ Step 1 Failed - Check Output Log"));
+		ErrorInfo.ExpireDuration = 5.0f;
+		FSlateNotificationManager::Get().AddNotification(ErrorInfo);
+	}
+}
+
+void FMetaHumanParametricPluginModule::OnCheckRiggingStatus()
+{
+	if (!LastGeneratedCharacter)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No character from Step 1 - please run Step 1 first"));
+
+		FNotificationInfo WarningInfo(LOCTEXT("NoCharacter", "No character found - please run Step 1 first"));
+		WarningInfo.ExpireDuration = 3.0f;
+		FSlateNotificationManager::Get().AddNotification(WarningInfo);
+		return;
+	}
+
+	FString Status = UMetaHumanParametricGenerator::GetRiggingStatusString(LastGeneratedCharacter);
+
+	UE_LOG(LogTemp, Log, TEXT("=== Rigging Status ==="));
+	UE_LOG(LogTemp, Log, TEXT("Character: %s"), *LastGeneratedCharacter->GetName());
+	UE_LOG(LogTemp, Log, TEXT("Status: %s"), *Status);
+
+	FString NotificationText = FString::Printf(TEXT("Status: %s"), *Status);
+	FNotificationInfo StatusInfo(FText::FromString(NotificationText));
+	StatusInfo.ExpireDuration = 5.0f;
+	FSlateNotificationManager::Get().AddNotification(StatusInfo);
+}
+
+void FMetaHumanParametricPluginModule::OnStep2Assemble()
+{
+	if (!LastGeneratedCharacter)
+	{
+		UE_LOG(LogTemp, Error, TEXT("No character from Step 1 - please run Step 1 first"));
+
+		FNotificationInfo ErrorInfo(LOCTEXT("NoCharacterForStep2", "No character found - please run Step 1 first"));
+		ErrorInfo.ExpireDuration = 3.0f;
+		FSlateNotificationManager::Get().AddNotification(ErrorInfo);
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("=== Two-Step Workflow: Step 2 - Assemble ==="));
+
+	FNotificationInfo Info(LOCTEXT("Step2Starting", "Step 2: Assembling character..."));
+	Info.ExpireDuration = 3.0f;
+	FSlateNotificationManager::Get().AddNotification(Info);
+
+	bool bSuccess = UMetaHumanParametricGenerator::AssembleCharacter(
+		LastGeneratedCharacter,
+		LastOutputPath,
+		LastQualityLevel
+	);
+
+	if (bSuccess)
+	{
+		UE_LOG(LogTemp, Log, TEXT("✓ Step 2 Complete - Character fully generated!"));
+
+		FNotificationInfo SuccessInfo(LOCTEXT("Step2Complete", "✓ Step 2 Complete! Character is ready in /Game/MetaHumans/"));
+		SuccessInfo.ExpireDuration = 7.0f;
+		FSlateNotificationManager::Get().AddNotification(SuccessInfo);
+
+		// Clear stored character
+		LastGeneratedCharacter = nullptr;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("✗ Step 2 Failed! Check if AutoRig is complete."));
+
+		FNotificationInfo ErrorInfo(LOCTEXT("Step2Failed", "✗ Step 2 Failed - Is AutoRig complete? Check status first!"));
+		ErrorInfo.ExpireDuration = 7.0f;
+		FSlateNotificationManager::Get().AddNotification(ErrorInfo);
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Modules/ModuleManager.h"
+#include "MetaHumanParametricPlugin.h"
+#include "MetaHumanParametricGenerator.h"
 
 class SNotificationItem;
 
@@ -32,8 +34,20 @@ private:
 	static void OnBatchGenerate();
 	static void OnRunPluginTest();
 
+	/** Two-Step Workflow callbacks */
+	static void OnStep1PrepareAndRig();
+	static void OnCheckRiggingStatus();
+	static void OnStep2Assemble();
+
 	/** Authentication menu command callbacks */
 	static void OnCheckAuthentication();
 	static void OnLoginToCloudServices();
 	static void OnTestAuthentication();
+
+private:
+	// Store the last generated character for the two-step workflow
+	// Note: These are defined in the .cpp file
+	static UMetaHumanCharacter* LastGeneratedCharacter;
+	static FString LastOutputPath;
+	static EMetaHumanQualityLevel LastQualityLevel;
 };

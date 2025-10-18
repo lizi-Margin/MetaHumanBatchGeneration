@@ -49,7 +49,212 @@ UMetaHumanCharacterEditorSubsystem* UMetaHumanParametricGenerator::getEditorSubs
 
 
 // ============================================================================
-// Main Generation Function
+// Two-Step Generation Workflow - Step 1: Prepare and Rig Character
+// ============================================================================
+
+bool UMetaHumanParametricGenerator::PrepareAndRigCharacter(
+	const FString& CharacterName,
+	const FString& OutputPath,
+	const FMetaHumanBodyParametricConfig& BodyConfig,
+	const FMetaHumanAppearanceConfig& AppearanceConfig,
+	UMetaHumanCharacter*& OutCharacter)
+{
+	UE_LOG(LogTemp, Log, TEXT("=== Step 1: Prepare and Rig Character ==="));
+	UE_LOG(LogTemp, Log, TEXT("Character Name: %s"), *CharacterName);
+	UE_LOG(LogTemp, Log, TEXT("Output Path: %s"), *OutputPath);
+
+	// Step 0: Check authentication
+	UE_LOG(LogTemp, Log, TEXT("[Step 0/4] Verifying MetaHuman cloud services authentication..."));
+	if (!EnsureCloudServicesLogin())
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to authenticate with MetaHuman cloud services!"));
+		return false;
+	}
+	UE_LOG(LogTemp, Log, TEXT("[Step 0/4] ✓ Authentication verified"));
+
+	// Step 1: Create base character
+	UE_LOG(LogTemp, Log, TEXT("[Step 1/4] Creating base MetaHuman Character asset..."));
+	UMetaHumanCharacter* Character = CreateBaseCharacter(
+		OutputPath,
+		CharacterName,
+		EMetaHumanCharacterTemplateType::MetaHuman
+	);
+
+	if (!Character)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to create base character!"));
+		return false;
+	}
+	UE_LOG(LogTemp, Log, TEXT("[Step 1/4] ✓ Base character created"));
+
+	// Step 2: Configure body and appearance
+	UE_LOG(LogTemp, Log, TEXT("[Step 2/4] Configuring body parameters and appearance..."));
+	if (!ConfigureBodyParameters(Character, BodyConfig))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to configure body parameters!"));
+		return false;
+	}
+
+	if (!ConfigureAppearance(Character, AppearanceConfig))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to configure appearance!"));
+		return false;
+	}
+	UE_LOG(LogTemp, Log, TEXT("[Step 2/4] ✓ Configuration complete"));
+
+	// Step 3: Download texture source data
+	UE_LOG(LogTemp, Log, TEXT("[Step 3/4] Downloading texture source data..."));
+	if (!DownloadTextureSourceData(Character))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Warning: Failed to download texture source data"));
+		// Continue anyway - might work without high-res textures
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Step 3/4] ✓ Texture source data downloaded"));
+	}
+
+	// Step 4: Start AutoRig (ASYNC - returns immediately!)
+	UE_LOG(LogTemp, Log, TEXT("[Step 4/4] Starting AutoRig (async cloud operation)..."));
+
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+	if (!EditorSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get editor subsystem"));
+		return false;
+	}
+
+	// Check if already rigged
+	EMetaHumanCharacterRigState RigState = EditorSubsystem->GetRiggingState(Character);
+	if (RigState == EMetaHumanCharacterRigState::Rigged)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Character already rigged, ready for assembly"));
+		OutCharacter = Character;
+		return true;
+	}
+
+	// Remove old rig if exists
+	check(Character->IsCharacterValid());
+	if (Character->HasFaceDNA())
+	{
+		Character->Modify();
+		EditorSubsystem->RemoveFaceRig(Character);
+		UE_LOG(LogTemp, Log, TEXT("Removed old face rig"));
+	}
+
+	// Start AutoRig (asynchronous - returns immediately!)
+	EditorSubsystem->AutoRigFace(Character, UE::MetaHuman::ERigType::JointsAndBlendshapes);
+
+	UE_LOG(LogTemp, Log, TEXT("[Step 4/4] ✓ AutoRig started (running in background)"));
+	UE_LOG(LogTemp, Log, TEXT("=== Step 1 Complete - AutoRig is now running in the background ==="));
+	UE_LOG(LogTemp, Log, TEXT("Use GetRiggingStatusString() to check progress"));
+	UE_LOG(LogTemp, Log, TEXT("When rigged, call AssembleCharacter() to finish"));
+
+	OutCharacter = Character;
+	return true;
+}
+
+// ============================================================================
+// Two-Step Generation Workflow - Step 2: Assemble Character
+// ============================================================================
+
+bool UMetaHumanParametricGenerator::AssembleCharacter(
+	UMetaHumanCharacter* Character,
+	const FString& OutputPath,
+	EMetaHumanQualityLevel QualityLevel)
+{
+	if (!Character)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid character for assembly"));
+		return false;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("=== Step 2: Assemble Character ==="));
+	UE_LOG(LogTemp, Log, TEXT("Character: %s"), *Character->GetName());
+	UE_LOG(LogTemp, Log, TEXT("Output Path: %s"), *OutputPath);
+
+	// Check if rigged
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+	if (!EditorSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get editor subsystem"));
+		return false;
+	}
+
+	EMetaHumanCharacterRigState RigState = EditorSubsystem->GetRiggingState(Character);
+	if (RigState != EMetaHumanCharacterRigState::Rigged)
+	{
+		const TCHAR* StateString = TEXT("Unknown");
+		switch (RigState)
+		{
+			case EMetaHumanCharacterRigState::Unrigged: StateString = TEXT("Unrigged"); break;
+			case EMetaHumanCharacterRigState::RigPending: StateString = TEXT("RigPending"); break;
+			case EMetaHumanCharacterRigState::Rigged: StateString = TEXT("Rigged"); break;
+		}
+
+		UE_LOG(LogTemp, Error, TEXT("Character is not rigged yet! Current state: %s"), StateString);
+		UE_LOG(LogTemp, Error, TEXT("Please wait for AutoRig to complete before calling AssembleCharacter()"));
+		return false;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("✓ Character is rigged, proceeding with assembly..."));
+
+	// Assemble using native pipeline
+	FMetaHumanAssemblyBuildParameters BuildParams =
+		UMetaHumanAssemblyPipelineManager::CreateDefaultBuildParameters(
+			Character,
+			QualityLevel,
+			OutputPath
+		);
+
+	if (!UMetaHumanAssemblyPipelineManager::BuildMetaHumanCharacter(Character, BuildParams))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to assemble character with native pipeline!"));
+		return false;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("✓ Character assembled successfully"));
+	UE_LOG(LogTemp, Log, TEXT("  Quality Level: %s"), *UEnum::GetValueAsString(QualityLevel));
+	UE_LOG(LogTemp, Log, TEXT("  Output Path: %s"), *OutputPath);
+	UE_LOG(LogTemp, Log, TEXT("=== Step 2 Complete - Character is ready! ==="));
+
+	return true;
+}
+
+// ============================================================================
+// Get Rigging Status
+// ============================================================================
+
+FString UMetaHumanParametricGenerator::GetRiggingStatusString(UMetaHumanCharacter* Character)
+{
+	if (!Character)
+	{
+		return TEXT("Invalid Character");
+	}
+
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+	if (!EditorSubsystem)
+	{
+		return TEXT("Error: Cannot get subsystem");
+	}
+
+	EMetaHumanCharacterRigState RigState = EditorSubsystem->GetRiggingState(Character);
+
+	switch (RigState)
+	{
+		case EMetaHumanCharacterRigState::Unrigged:
+			return TEXT("Unrigged");
+		case EMetaHumanCharacterRigState::RigPending:
+			return TEXT("RigPending (AutoRig in progress...)");
+		case EMetaHumanCharacterRigState::Rigged:
+			return TEXT("Rigged (Ready for assembly!)");
+		default:
+			return TEXT("Unknown");
+	}
+}
+
+// ============================================================================
+// Main Generation Function (Legacy - Blocking)
 // ============================================================================
 
 bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
@@ -713,6 +918,20 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData(UMetaHumanCharacte
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to get editor subsystem for texture download"));
 		return false;
+	}
+	bool CanDownload =  Character->HasSynthesizedTextures() && \
+						!EditorSubsystem->IsRequestingHighResolutionTextures(Character) && \
+						EditorSubsystem->IsTextureSynthesisEnabled();
+	if (!CanDownload)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Character has no synthesized textures, cannot download high-res textures"));
+		return false;
+	}
+	
+	if (Character->HasHighResolutionTextures())
+	{
+		UE_LOG(LogTemp, Log, TEXT("Character already has high-res textures, no need to download"));
+		return true;
 	}
 
 	return DownloadTextureSourceData_Impl(Character, EditorSubsystem);

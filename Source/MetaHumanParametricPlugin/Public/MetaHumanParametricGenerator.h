@@ -131,8 +131,74 @@ class UMetaHumanParametricGenerator : public UObject
 	GENERATED_BODY()
 
 public:
+	// ============================================================================
+	// Two-Step Generation Workflow (Recommended - Non-blocking)
+	// ============================================================================
+
 	/**
-	 * 主要生成函数：创建一个完整的参数化 MetaHuman 角色
+	 * Step 1: 准备并开始 Rigging 角色
+	 * 此函数会：
+	 * 1. 创建 MetaHuman Character 资产
+	 * 2. 配置身体参数和外观
+	 * 3. 下载纹理源数据
+	 * 4. 启动 AutoRig（异步云服务）
+	 * 5. 立即返回（不等待 AutoRig 完成）
+	 *
+	 * AutoRig 会在后台运行，完成后你可以调用 AssembleCharacter() 完成角色生成
+	 *
+	 * @param CharacterName - 角色名称
+	 * @param OutputPath - 输出路径 (例如: "/Game/MyCharacters/")
+	 * @param BodyConfig - 身体参数配置
+	 * @param AppearanceConfig - 外观配置
+	 * @param OutCharacter - 输出：创建的角色资产（未完成 rigging）
+	 * @return 是否成功创建并启动 AutoRig
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Generation")
+	static bool PrepareAndRigCharacter(
+		const FString& CharacterName,
+		const FString& OutputPath,
+		const FMetaHumanBodyParametricConfig& BodyConfig,
+		const FMetaHumanAppearanceConfig& AppearanceConfig,
+		UMetaHumanCharacter*& OutCharacter);
+
+	/**
+	 * Step 2: 组装角色（在 AutoRig 完成后调用）
+	 * 此函数会：
+	 * 1. 检查角色是否已完成 rigging
+	 * 2. 使用原生管线组装角色（生成网格、纹理、ABP 等）
+	 * 3. 保存所有资产
+	 *
+	 * 注意：此函数必须在 AutoRig 完成后才能成功调用
+	 *
+	 * @param Character - 已完成 rigging 的角色资产
+	 * @param OutputPath - 输出路径
+	 * @param QualityLevel - 质量级别
+	 * @return 是否成功组装角色
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Generation")
+	static bool AssembleCharacter(
+		UMetaHumanCharacter* Character,
+		const FString& OutputPath,
+		EMetaHumanQualityLevel QualityLevel);
+
+	/**
+	 * 检查角色的 Rigging 状态
+	 *
+	 * @param Character - 要检查的角色
+	 * @return Rigging 状态：Unrigged, RigPending, Rigged
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Generation")
+	static FString GetRiggingStatusString(UMetaHumanCharacter* Character);
+
+	// ============================================================================
+	// Legacy Function (One-Step, Blocking - Not Recommended for UI)
+	// ============================================================================
+
+	/**
+	 * 一步式生成函数：创建一个完整的参数化 MetaHuman 角色
+	 *
+	 * WARNING: 此函数包含阻塞等待操作（AutoRig），必须在后台线程调用！
+	 * 推荐使用 PrepareAndRigCharacter() + AssembleCharacter() 的两步式方案
 	 *
 	 * @param CharacterName - 角色名称
 	 * @param OutputPath - 输出路径 (例如: "/Game/MyCharacters/")
