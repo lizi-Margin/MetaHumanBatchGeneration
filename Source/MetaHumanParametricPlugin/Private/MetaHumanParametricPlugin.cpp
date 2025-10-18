@@ -152,15 +152,25 @@ void FMetaHumanParametricPluginModule::OnGenerateSlenderFemale()
 {
 	UE_LOG(LogTemp, Warning, TEXT("Starting Example 1: Slender Female..."));
 
-	FNotificationInfo Info(LOCTEXT("GeneratingSlenderFemale", "Generating Slender Female Character..."));
+	FNotificationInfo Info(LOCTEXT("GeneratingSlenderFemale", "Generating Slender Female Character... (Running in background)"));
 	Info.ExpireDuration = 3.0f;
 	FSlateNotificationManager::Get().AddNotification(Info);
 
-	Example1_CreateSlenderFemale();
+	// Run generation in background thread to allow blocking operations (AutoRig wait loop)
+	Async(EAsyncExecution::Thread, []()
+	{
+		UE_LOG(LogTemp, Log, TEXT("=== Background Thread: Starting character generation ==="));
+		Example1_CreateSlenderFemale();
 
-	FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete", "Character Generation Complete! Check Output Log."));
-	CompletedInfo.ExpireDuration = 5.0f;
-	FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+		// Show completion notification on game thread
+		AsyncTask(ENamedThreads::GameThread, []()
+		{
+			FNotificationInfo CompletedInfo(LOCTEXT("GenerationComplete", "Character Generation Complete! Check Output Log."));
+			CompletedInfo.ExpireDuration = 5.0f;
+			FSlateNotificationManager::Get().AddNotification(CompletedInfo);
+			UE_LOG(LogTemp, Log, TEXT("=== Background Thread: Character generation completed ==="));
+		});
+	});
 }
 
 void FMetaHumanParametricPluginModule::OnGenerateMuscularMale()

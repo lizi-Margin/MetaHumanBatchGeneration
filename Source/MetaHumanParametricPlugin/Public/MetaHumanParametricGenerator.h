@@ -233,11 +233,10 @@ private:
 	static bool DownloadTextureSourceData(UMetaHumanCharacter* Character);
 
 	/**
-	 * 对角色进行 rigging (异步版本)
-	 * @param Character - 需要 rigging 的角色
-	 * @param OnComplete - 完成时的回调函数，参数为是否成功
+	 * 对角色进行 rigging
+	 * NOTE: Uses synchronous waiting - MUST be called from background thread, NOT UI thread!
 	 */
-	static void RigCharacterAsync(UMetaHumanCharacter* Character, TFunction<void(bool)> OnComplete);
+	static bool RigCharacter(UMetaHumanCharacter* Character);
 
 private:
 	/**

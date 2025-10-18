@@ -31,18 +31,20 @@
 UMetaHumanCharacterEditorSubsystem* UMetaHumanParametricGenerator::getEditorSubsystem()
 {
 	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = nullptr;
-	if (IsInGameThread())
-	{
-		// EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
-		EditorSubsystem = UMetaHumanCharacterEditorSubsystem::Get();
-		return EditorSubsystem;
-	}
-	else
-	{
-		// If not in the game thread, we return false directly to let the main thread handle it
-		UE_LOG(LogTemp, Warning, TEXT("getEditorSubsystem called from background thread - returning null. MetaHuman operations must run on game thread."));
-		return nullptr;
-	}
+	EditorSubsystem = UMetaHumanCharacterEditorSubsystem::Get();
+	return EditorSubsystem;
+	// if (IsInGameThread())
+	// {
+	// 	// EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+	// 	EditorSubsystem = UMetaHumanCharacterEditorSubsystem::Get();
+	// 	return EditorSubsystem;
+	// }
+	// else
+	// {
+	// 	// If not in the game thread, we return false directly to let the main thread handle it
+	// 	UE_LOG(LogTemp, Warning, TEXT("getEditorSubsystem called from background thread - returning null. MetaHuman operations must run on game thread."));
+	// 	return nullptr;
+	// }
 }
 
 
@@ -115,13 +117,19 @@ bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Step 4/6] ✓ Texture source data download completed"));
 
-	UE_LOG(LogTemp, Log, TEXT("[Step 4.5/6] AutoRig "));
-	// if (!RigCharacter(Character))
-	// {
-	// 	UE_LOG(LogTemp, Warning, TEXT("Warning: Failed to rig character"));
-	// 	// return false;
-	// }
-	// UE_LOG(LogTemp, Log, TEXT("[Step 4.5/6] ✓ Character rigging completed"));
+	// Step 4.5: Rig character
+	// NOTE: This function uses synchronous waiting which blocks the calling thread
+	// It MUST be called from a background thread, NOT from UI/GameThread
+	UE_LOG(LogTemp, Log, TEXT("[Step 4.5/6] Rigging character (blocking operation)..."));
+	if (!RigCharacter(Character))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Warning: Failed to rig character"));
+		// Continue anyway - rigging can be done manually later
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Step 4.5/6] ✓ Character rigging completed"));
+	}
 
 	// Step 5: Assemble character using native pipeline (replaces old GenerateCharacterAssets + SaveCharacterAssets)
 	UE_LOG(LogTemp, Log, TEXT("[Step 5/5] Assembling character with native pipeline..."));
@@ -874,8 +882,10 @@ bool UMetaHumanParametricGenerator::RigCharacter(UMetaHumanCharacter* Character)
 	EditorSubsystem->AutoRigFace(Character, UE::MetaHuman::ERigType::JointsAndBlendshapes);
 
 	// Wait for completion with timeout
+	// NOTE: We are running in a background thread - delegate callbacks occur on GameThread
+	// We just need to wait for the completion flags to be set by the delegate
 	const float AutorigStartTime = FPlatformTime::Seconds();
-	const float MaxWaitTime = 180.0f; // Increase to 3 minutes for network operations
+	const float MaxWaitTime = 180.0f; // 3 minutes for network operations
 	float LastProgressReport = 0.0f;
 
 	while (!bRiggingComplete)
@@ -887,6 +897,7 @@ bool UMetaHumanParametricGenerator::RigCharacter(UMetaHumanCharacter* Character)
 		{
 			UE_LOG(LogTemp, Log, TEXT("Autorig in progress... (%.1f seconds elapsed)"), ElapsedTime);
 			UE_LOG(LogTemp, Log, TEXT("  Waiting for cloud service response..."));
+			UE_LOG(LogTemp, Log, TEXT("  (Running in background thread - editor remains responsive)"));
 			LastProgressReport = ElapsedTime;
 		}
 
@@ -897,24 +908,8 @@ bool UMetaHumanParametricGenerator::RigCharacter(UMetaHumanCharacter* Character)
 			break;
 		}
 
-		// Tick the editor to process callbacks
-		// This is critical: without this, HTTP response callbacks won't be processed!
-		if (GEditor)
-		{
-			GEditor->Tick(0.1f, false);
-		}
-
-		// UnrealEditor_Core
-		// UnrealEditor_Engine
-		// UnrealEditor_UnrealEd
-		// UnrealEditor_UnrealEd
-		// UnrealEditor_MetaHumanParametricPlugin!UMetaHumanParametricGenerator::RigCharacter() [C:\Users\hulc\Desktop\MH_header\MH_header\Plugins\MetaHumanParametricPlugin\Source\MetaHumanParametricPlugin\Private\MetaHumanParametricGenerator.cpp:909]
-		// UnrealEditor_MetaHumanParametricPlugin!UMetaHumanParametricGenerator::GenerateParametricMetaHuman() [C:\Users\hulc\Desktop\MH_header\MH_header\Plugins\MetaHumanParametricPlugin\Source\MetaHumanParametricPlugin\Private\MetaHumanParametricGenerator.cpp:120]
-		// UnrealEditor_MetaHumanParametricPlugin!Example1_CreateSlenderFemale() [C:\Users\hulc\Desktop\MH_header\MH_header\Plugins\MetaHumanParametricPlugin\Source\MetaHumanParametricPlugin\Private\MetaHumanParametricGenerator_Examples.cpp:47]
-		// UnrealEditor_MetaHumanParametricPlugin!FMetaHumanParametricPluginModule::OnGenerateSlenderFemale() [C:\Users\hulc\Desktop\MH_header\MH_header\Plugins\MetaHumanParametricPlugin\Source\MetaHumanParametricPlugin\Private\MetaHumanParametricPlugin.cpp:161]
-		// UnrealEditor_MetaHumanParametricPlugin!TBaseStaticDelegateInstance<void __cdecl(void),FDefaultDelegateUserPolicy>::ExecuteIfSafe() [I:\UE_5.6\Engine\Source\Runtime\Core\Public\Delegates\DelegateInstancesImpl.h:801]
-		// UnrealEditor_Slate
-		// FPlatformProcess::Sleep(0.01f);
+		// Sleep to avoid busy-waiting - delegate will update flags on GameThread
+		FPlatformProcess::Sleep(0.001f);
 	}
 
 	// Unregister delegate
