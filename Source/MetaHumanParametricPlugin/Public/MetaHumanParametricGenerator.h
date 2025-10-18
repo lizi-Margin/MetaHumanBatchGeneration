@@ -227,6 +227,11 @@ private:
 	 */
 	static bool DownloadTextureSourceData(UMetaHumanCharacter* Character);
 
+	/**
+	 * 对角色进行 rigging
+	 */
+	static bool RigCharacter(UMetaHumanCharacter* Character);
+
 private:
 	/**
 	 * 下载纹理源数据的实际实现函数

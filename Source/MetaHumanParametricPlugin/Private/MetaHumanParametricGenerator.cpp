@@ -24,6 +24,7 @@
 #include "Misc/DateTime.h"
 #include "Cloud/MetaHumanARServiceRequest.h"
 #include "Cloud/MetaHumanServiceRequest.h"  // For ServiceAuthentication namespace
+#include <UObject/UnrealType.h>
 
 
 UMetaHumanCharacterEditorSubsystem* UMetaHumanParametricGenerator::getEditorSubsystem()
@@ -103,12 +104,21 @@ bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Step 3/5] ✓ Appearance configured"));
 
-	// Step 4: Download texture source data (new)
+	// Step 4: Download texture source data
 	UE_LOG(LogTemp, Log, TEXT("[Step 4/6] Downloading texture source data..."));
 	if (!DownloadTextureSourceData(Character))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Warning: Failed to download texture source data, will use default textures"));
-		// Don't return false, continue with default textures
+		UE_LOG(LogTemp, Warning, TEXT("Warning: Failed to download texture source data"));
+		return false;
+	}
+	UE_LOG(LogTemp, Log, TEXT("[Step 4/6] ✓ Texture source data download completed"));
+
+	// Step 4.5: Rig character
+	UE_LOG(LogTemp, Log, TEXT("[Step 4.5/6] Rigging character..."));
+	if (!RigCharacter(Character))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Warning: Failed to rig character"));
+		// return false;
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Step 4/6] ✓ Texture source data download completed"));
 
@@ -129,7 +139,7 @@ bool UMetaHumanParametricGenerator::GenerateParametricMetaHuman(
 		UE_LOG(LogTemp, Error, TEXT("Failed to save character assets!"));
 		return false;
 	}
-	UE_LOG(LogTemp, Log, TEXT("[Step 5/5] ✓ Assets saved to: %s"), *OutputPath);
+	UE_LOG(LogTemp, Log, TEXT("[Step 6/6] ✓ Assets saved to: %s"), *OutputPath);
 
 	OutCharacter = Character;
 	UE_LOG(LogTemp, Log, TEXT("=== MetaHuman Generation Completed Successfully ==="));
@@ -365,6 +375,13 @@ bool UMetaHumanParametricGenerator::GenerateCharacterAssets(
 	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
 	if (!EditorSubsystem)
 	{
+		return false;
+	}
+
+	FText ErrorMessage;
+	if (!EditorSubsystem->CanBuildMetaHuman(Character, ErrorMessage))
+	{
+		UE_LOG(LogTemp, Error, TEXT("CanBuildMetaHuman failed: %s"), *ErrorMessage.ToString());
 		return false;
 	}
 
@@ -751,6 +768,112 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 		return false;
 	}
 }
+
+
+
+// ============================================================================
+// Rig Character
+// ============================================================================
+
+bool UMetaHumanParametricGenerator::RigCharacter(UMetaHumanCharacter* Character)
+{
+	if (!Character)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid character for rigging"));
+		return false;
+	}
+
+	// Ensure EditorSubsystem is obtained in the game thread
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+
+	if (!EditorSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get editor subsystem for rigging"));
+		return false;
+	}
+
+	// Get current rigging state
+	EMetaHumanCharacterRigState RigState = EditorSubsystem->GetRiggingState(Character);
+
+	if (RigState == EMetaHumanCharacterRigState::Unrigged)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Character is not rigged, performing autorig with retry logic..."));
+
+		// Retry autorig up to 5 times in case of network errors
+		bool bAutorigSucceeded = false;
+
+		// see Engine\Plugins\MetaHuman\MetaHumanCharacter\Source\MetaHumanCharacterEditor\Private\MetaHumanCharacterEditorToolkit.cpp line 910 AutoRigFace
+		check(Character->IsCharacterValid())
+		if (Character->HasFaceDNA())
+		{
+			Character->Modify();
+			EditorSubsystem->RemoveFaceRig(Character);
+			UE_LOG(LogTemp, Log, TEXT("Removed old face rig from character"));
+		}
+
+		// Execute auto-rigging
+		UE_LOG(LogTemp, Log, TEXT("Starting autorig..."));
+		EditorSubsystem->AutoRigFace(Character, UE::MetaHuman::ERigType::JointsAndBlendshapes);
+
+		// Wait for auto-rigging to complete
+		const float AutorigStartTime = FPlatformTime::Seconds();
+		const float MaxWaitTime = 120.0f;
+		float LastAutorigProgress = 0.0f;
+
+		while (EditorSubsystem->IsAutoRiggingFace(Character))
+		{
+			const float AutorigElapsedTime = FPlatformTime::Seconds() - AutorigStartTime;
+
+			// Report progress every 15 seconds
+			if (AutorigElapsedTime - LastAutorigProgress > 15.0f)
+			{
+				UE_LOG(LogTemp, Log, TEXT("Autorig in progress... (%.1f seconds elapsed)"), AutorigElapsedTime);
+				LastAutorigProgress = AutorigElapsedTime;
+			}
+			if (AutorigElapsedTime > MaxWaitTime)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Autorig operation timed out after %.1f seconds, won't wait anymore"), AutorigElapsedTime);
+				break;
+			}
+			// In background thread, no need to manually handle tick
+			FPlatformProcess::Sleep(1.0f); // Longer sleep time because this is a background operation
+		}
+
+		const float AutorigTotalTime = FPlatformTime::Seconds() - AutorigStartTime;
+		UE_LOG(LogTemp, Log, TEXT("Autorig operation took %.1f seconds"), AutorigTotalTime);
+		
+		// Check rigging state after this attempt
+		RigState = EditorSubsystem->GetRiggingState(Character);
+		if (RigState == EMetaHumanCharacterRigState::Rigged)
+		{
+			bAutorigSucceeded = true;
+			UE_LOG(LogTemp, Log, TEXT("✓ Character successfully rigged"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("✗ Autorig attempt failed (character not rigged)"));
+		}
+	
+
+		// Final check after all retries
+		if (!bAutorigSucceeded)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Warning: Character still not riggedt"));
+			return false;
+		}
+		else
+		{
+			return true;
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("Character is already rigged, skipping autorig"));
+		return true;
+	}
+}
+
+
 
 // ============================================================================
 // MetaHuman Cloud Services Authentication Functions (新增)
