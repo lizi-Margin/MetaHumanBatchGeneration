@@ -427,6 +427,10 @@ bool UMetaHumanParametricGenerator::ConfigureAppearance(
 		FMetaHumanCharacterEyesSettings EyesSettings;
 
 		// Use the same settings for left and right eyes (can be set separately)
+		UE_LOG(LogTemp, Log, TEXT("    • Iris Pattern: %s"),
+			*UEnum::GetValueAsString(AppearanceConfig.IrisPattern));
+		UE_LOG(LogTemp, Log, TEXT("    • Iris Color: (U=%.2f, V=%.2f)"),
+			AppearanceConfig.IrisPrimaryColorU, AppearanceConfig.IrisPrimaryColorV);
 		EyesSettings.EyeLeft.Iris.IrisPattern = AppearanceConfig.IrisPattern;
 		EyesSettings.EyeLeft.Iris.PrimaryColorU = AppearanceConfig.IrisPrimaryColorU;
 		EyesSettings.EyeLeft.Iris.PrimaryColorV = AppearanceConfig.IrisPrimaryColorV;

@@ -10,6 +10,12 @@ void UEditorBatchGenerationSubsystem::Initialize(FSubsystemCollectionBase& Colle
 {
 	Super::Initialize(Collection);
 	UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Initialized"));
+	// Register ticker delegate - this is how we "tick" in the editor!
+	TickerHandle = FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateUObject(this, &UEditorBatchGenerationSubsystem::TickStateMachine),
+		CheckIntervalConfig
+	);
+	UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Tick interval set to %.1f seconds"), CheckIntervalConfig);
 }
 
 void UEditorBatchGenerationSubsystem::Deinitialize()
@@ -53,12 +59,6 @@ void UEditorBatchGenerationSubsystem::StartBatchGeneration(
 	// Reset state
 	GeneratedCount = 0;
 	LastErrorMessage.Empty();
-
-	// Register ticker delegate - this is how we "tick" in the editor!
-	TickerHandle = FTSTicker::GetCoreTicker().AddTicker(
-		FTickerDelegate::CreateUObject(this, &UEditorBatchGenerationSubsystem::TickStateMachine),
-		CheckIntervalConfig
-	);
 
 	// Start state machine
 	TransitionToState(EBatchGenState::Preparing);
@@ -119,6 +119,8 @@ bool UEditorBatchGenerationSubsystem::TickStateMachine(float DeltaTime)
 
 	if (bShouldProcessState)
 	{
+
+		UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Tick, current state: %s)"), *GetCurrentStateString());
 		switch (CurrentState)
 		{
 			case EBatchGenState::Idle:
@@ -210,8 +212,6 @@ void UEditorBatchGenerationSubsystem::HandlePreparingState()
 		UE_LOG(LogTemp, Error, TEXT("EditorBatchGenerationSubsystem: ✗ %s"), *LastErrorMessage);
 		TransitionToState(EBatchGenState::Error);
 	}
-
-	bShouldProcessState = false; // Don't process again until next tick
 }
 
 void UEditorBatchGenerationSubsystem::HandleWaitingForRigState()
@@ -231,7 +231,7 @@ void UEditorBatchGenerationSubsystem::HandleWaitingForRigState()
 	UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Checking rig status... %s"), *RigStatus);
 
 	// Check if rigged
-	if (RigStatus.Contains(TEXT("Rigged (Ready for assembly!)")))
+	if (RigStatus.Contains(TEXT("Rigged")))
 	{
 		UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: ✓ AutoRig complete! Proceeding to assembly"));
 		TransitionToState(EBatchGenState::Assembling);
@@ -244,6 +244,7 @@ void UEditorBatchGenerationSubsystem::HandleWaitingForRigState()
 		TransitionToState(EBatchGenState::Error);
 	}
 	// Otherwise, still waiting (RigPending) - will check again on next tick
+	UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: AutoRig is still pending... %s"), *RigStatus);
 }
 
 void UEditorBatchGenerationSubsystem::HandleAssemblingState()
@@ -279,8 +280,6 @@ void UEditorBatchGenerationSubsystem::HandleAssemblingState()
 		UE_LOG(LogTemp, Error, TEXT("EditorBatchGenerationSubsystem: ✗ %s"), *LastErrorMessage);
 		TransitionToState(EBatchGenState::Error);
 	}
-
-	bShouldProcessState = false; // Don't process again until next tick
 }
 
 void UEditorBatchGenerationSubsystem::HandleCompleteState()
@@ -363,30 +362,31 @@ FMetaHumanBodyParametricConfig UEditorBatchGenerationSubsystem::GenerateRandomBo
 FMetaHumanAppearanceConfig UEditorBatchGenerationSubsystem::GenerateRandomAppearanceConfig()
 {
 	FMetaHumanAppearanceConfig Config;
-
-	// Random skin tone (UV coordinates in 0-1 range)
-	Config.SkinToneU = FMath::FRandRange(0.0f, 1.0f);
-	Config.SkinToneV = FMath::FRandRange(0.0f, 1.0f);
-
-	// Skin roughness (0.5 - 1.5 is a reasonable range)
-	Config.SkinRoughness = FMath::FRandRange(0.5f, 1.5f);
-
-	// Random iris pattern (there are multiple Iris patterns, let's use a random enum value)
-	int32 RandomIrisPattern = FMath::RandRange(0, 10); // Assuming ~10 iris patterns
-	Config.IrisPattern = static_cast<EMetaHumanCharacterEyesIrisPattern>(RandomIrisPattern);
-
-	// Random iris color
-	Config.IrisPrimaryColorU = FMath::FRandRange(0.0f, 1.0f);
-	Config.IrisPrimaryColorV = FMath::FRandRange(0.0f, 1.0f);
-
-	// Random eyelashes type
-	int32 RandomEyelashType = FMath::RandRange(0, 2); // Assuming 3 types (Thin, Medium, Thick)
-	Config.EyelashesType = static_cast<EMetaHumanCharacterEyelashesType>(RandomEyelashType);
-
-	// Enable eyelash grooms (randomly)
-	Config.bEnableEyelashGrooms = FMath::RandBool();
-
 	return Config;
+
+	// // Random skin tone (UV coordinates in 0-1 range)
+	// Config.SkinToneU = FMath::FRandRange(0.0f, 1.0f);
+	// Config.SkinToneV = FMath::FRandRange(0.0f, 1.0f);
+
+	// // Skin roughness (0.5 - 1.5 is a reasonable range)
+	// Config.SkinRoughness = FMath::FRandRange(0.0f, 2.0f);
+
+	// // Random iris pattern (there are multiple Iris patterns, let's use a random enum value)
+	// int32 RandomIrisPattern = FMath::RandRange(0, 9);   // !!!
+	// Config.IrisPattern = static_cast<EMetaHumanCharacterEyesIrisPattern>(RandomIrisPattern);
+
+	// // Random iris color
+	// Config.IrisPrimaryColorU = FMath::FRandRange(0.0f, 1.0f);
+	// Config.IrisPrimaryColorV = FMath::FRandRange(0.0f, 1.0f);
+
+	// // Random eyelashes type
+	// int32 RandomEyelashType = FMath::RandRange(0, 6);  // !!!
+	// Config.EyelashesType = static_cast<EMetaHumanCharacterEyelashesType>(RandomEyelashType);
+
+	// // Enable eyelash grooms (randomly)
+	// Config.bEnableEyelashGrooms = FMath::RandBool();
+
+	// return Config;
 }
 
 FString UEditorBatchGenerationSubsystem::GenerateUniqueCharacterName()

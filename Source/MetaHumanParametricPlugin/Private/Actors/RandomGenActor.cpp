@@ -113,6 +113,8 @@ FString ARandomGenActor::GetCurrentStateString() const
 
 void ARandomGenActor::UpdateStateMachine(float DeltaTime)
 {
+
+	UE_LOG(LogTemp, Log, TEXT("RandomGenActor: Updating, current state: %s)"), *GetCurrentStateString());
 	switch (CurrentState)
 	{
 		case ERandomGenState::Idle:
@@ -210,7 +212,7 @@ void ARandomGenActor::HandleWaitingForRigState()
 	}
 
 	// Check if rigged
-	if (RigStatus.Contains(TEXT("Rigged (Ready for assembly!)")))
+	if (RigStatus.Contains(TEXT("Rigged")))
 	{
 		UE_LOG(LogTemp, Log, TEXT("RandomGenActor: ✓ AutoRig complete! Proceeding to assembly"));
 		TransitionToState(ERandomGenState::Assembling);
@@ -223,6 +225,7 @@ void ARandomGenActor::HandleWaitingForRigState()
 		TransitionToState(ERandomGenState::Error);
 	}
 	// Otherwise, still waiting (RigPending)
+	UE_LOG(LogTemp, Log, TEXT("RandomGenActor: AutoRig is still pending... %s"), *RigStatus);
 }
 
 void ARandomGenActor::HandleAssemblingState()
