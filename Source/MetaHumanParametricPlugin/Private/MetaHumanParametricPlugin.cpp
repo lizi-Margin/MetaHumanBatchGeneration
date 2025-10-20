@@ -2,6 +2,7 @@
 
 #include "MetaHumanParametricPlugin.h"
 #include "MetaHumanParametricGenerator.h"
+#include "MetaHumanBlueprintExporter.h"
 #include "EditorBatchGenerationSubsystem.h"
 #include "LevelEditor.h"
 #include "ToolMenus.h"
@@ -85,6 +86,18 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 				LOCTEXT("Step2AssembleTooltip", "Assemble character after AutoRig completes"),
 				FSlateIcon(),
 				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnStep2Assemble))
+			);
+
+			// Add separator
+			TwoStepSection.AddSeparator("ExportSeparator");
+
+			// Export with Animation BP
+			TwoStepSection.AddMenuEntry(
+				"ExportWithAnimBP",
+				LOCTEXT("ExportWithAnimBPLabel", "Export Mesh & Create Preview BP"),
+				LOCTEXT("ExportWithAnimBPTooltip", "Export skeletal mesh and create preview Blueprint with animation BP (after Step 2)"),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnExportWithAnimBP))
 			);
 		}),
 		false,
@@ -407,8 +420,6 @@ void FMetaHumanParametricPluginModule::OnStep2Assemble()
 		SuccessInfo.ExpireDuration = 7.0f;
 		FSlateNotificationManager::Get().AddNotification(SuccessInfo);
 
-		// Clear stored character
-		LastGeneratedCharacter = nullptr;
 	}
 	else
 	{
@@ -537,6 +548,77 @@ void FMetaHumanParametricPluginModule::OnCheckBatchStatus()
 	FNotificationInfo StatusInfo(FText::FromString(StatusMessage));
 	StatusInfo.ExpireDuration = 5.0f;
 	FSlateNotificationManager::Get().AddNotification(StatusInfo);
+}
+
+// ============================================================================
+// Export with Animation BP Callback
+// ============================================================================
+
+void FMetaHumanParametricPluginModule::OnExportWithAnimBP()
+{
+	if (!LastGeneratedCharacter)
+	{
+		UE_LOG(LogTemp, Error, TEXT("No character available for export - please complete Step 1 and Step 2 first"));
+
+		FNotificationInfo ErrorInfo(LOCTEXT("NoCharacterForExport", "No character found - please complete Step 1 & 2 first"));
+		ErrorInfo.ExpireDuration = 3.0f;
+		FSlateNotificationManager::Get().AddNotification(ErrorInfo);
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("=== Exporting Character with Animation BP ==="));
+
+	FNotificationInfo Info(LOCTEXT("ExportStarting", "Exporting skeletal mesh and creating preview Blueprint..."));
+	Info.ExpireDuration = 3.0f;
+	FSlateNotificationManager::Get().AddNotification(Info);
+
+	// Animation blueprint path - using the user specified path
+	FString AnimBlueprintPath = TEXT("/Game/HumanCharacter/Mannequin/Animations/ThirdPerson_AnimBP.ThirdPerson_AnimBP");
+
+	// Output path
+	FString OutputPath = TEXT("/Game/ExportedCharacters");
+
+	// Generate base name from character
+	FString CharacterName = LastGeneratedCharacter->GetName();
+	FString BaseName = CharacterName;
+
+	UE_LOG(LogTemp, Log, TEXT("Character: %s"), *CharacterName);
+	UE_LOG(LogTemp, Log, TEXT("Output Path: %s"), *OutputPath);
+	UE_LOG(LogTemp, Log, TEXT("Animation BP: %s"), *AnimBlueprintPath);
+
+	// Export character with preview BP
+	USkeletalMesh* ExportedMesh = nullptr;
+	UBlueprint* PreviewBP = nullptr;
+
+	bool bSuccess = UMetaHumanBlueprintExporter::ExportCharacterWithPreviewBP(
+		LastGeneratedCharacter,
+		AnimBlueprintPath,
+		OutputPath,
+		BaseName,
+		ExportedMesh,
+		PreviewBP
+	);
+
+	if (bSuccess && ExportedMesh && PreviewBP)
+	{
+		UE_LOG(LogTemp, Log, TEXT("✓ Export Complete!"));
+		UE_LOG(LogTemp, Log, TEXT("  Skeletal Mesh: %s"), *ExportedMesh->GetPathName());
+		UE_LOG(LogTemp, Log, TEXT("  Preview BP: %s"), *PreviewBP->GetPathName());
+
+		FString SuccessMessage = FString::Printf(TEXT("✓ Export Complete! Mesh & BP created in %s"), *OutputPath);
+		FNotificationInfo SuccessInfo(FText::FromString(SuccessMessage));
+		SuccessInfo.ExpireDuration = 7.0f;
+		FSlateNotificationManager::Get().AddNotification(SuccessInfo);
+
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("✗ Export Failed! Check Output Log for details."));
+
+		FNotificationInfo ErrorInfo(LOCTEXT("ExportFailed", "✗ Export Failed - Check Output Log for details"));
+		ErrorInfo.ExpireDuration = 7.0f;
+		FSlateNotificationManager::Get().AddNotification(ErrorInfo);
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

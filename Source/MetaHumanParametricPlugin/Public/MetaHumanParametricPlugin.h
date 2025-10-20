@@ -38,6 +38,7 @@ private:
 	static void OnStep1PrepareAndRig();
 	static void OnCheckRiggingStatus();
 	static void OnStep2Assemble();
+	static void OnExportWithAnimBP();
 
 	/** Authentication menu command callbacks */
 	static void OnCheckAuthentication();
