@@ -113,8 +113,8 @@ private:
 
 	void GenerateRandomCharacterConfigs(
 		FMetaHumanBodyParametricConfig& OutBodyConfig,
-		FMetaHumanAppearanceConfig& OutAppearanceConfig);
-	FString GenerateUniqueCharacterName();
+		FMetaHumanAppearanceConfig& OutAppearanceConfig,
+		FString& OutCharacterName);
 
 	// ============================================================================
 	// Internal State

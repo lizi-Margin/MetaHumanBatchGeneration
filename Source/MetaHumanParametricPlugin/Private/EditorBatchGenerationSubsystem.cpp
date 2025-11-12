@@ -182,9 +182,7 @@ void UEditorBatchGenerationSubsystem::HandlePreparingState()
 
 	FMetaHumanBodyParametricConfig BodyConfig;
 	FMetaHumanAppearanceConfig AppearanceConfig;
-	GenerateRandomCharacterConfigs(BodyConfig, AppearanceConfig);
-
-	CurrentCharacterName = GenerateUniqueCharacterName();
+	GenerateRandomCharacterConfigs(BodyConfig, AppearanceConfig, CurrentCharacterName);
 
 	UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Character Name: %s"), *CurrentCharacterName);
 	UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Body Type: %s"), *UEnum::GetValueAsString(BodyConfig.BodyType));
@@ -284,45 +282,22 @@ void UEditorBatchGenerationSubsystem::HandleAssemblingState()
 
 void UEditorBatchGenerationSubsystem::HandleCompleteState()
 {
-	// Log completion (only once)
-	static bool bLoggedCompletion = false;
-	if (!bLoggedCompletion)
+	// Log completion (only once per character generation)
+	UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: === Generation Complete ==="));
+
+	if (bLoopGenerationEnabled)
 	{
-		UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: === Generation Complete ==="));
-
-		if (bLoopGenerationEnabled)
-		{
-			UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Loop mode enabled - will start next character in %.1f seconds"), LoopDelayConfig);
-			LoopDelayTimer = LoopDelayConfig;
-		}
-
-		bLoggedCompletion = true;
-	}
-
-	// Reset flag when leaving complete state
-	if (CurrentState != EBatchGenState::Complete)
-	{
-		bLoggedCompletion = false;
+		UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Loop mode enabled - will start next character in %.1f seconds"), LoopDelayConfig);
+		LoopDelayTimer = LoopDelayConfig;
 	}
 }
 
 void UEditorBatchGenerationSubsystem::HandleErrorState()
 {
-	// Log error (only once)
-	static bool bLoggedError = false;
-	if (!bLoggedError)
-	{
-		UE_LOG(LogTemp, Error, TEXT("EditorBatchGenerationSubsystem: === Error State ==="));
-		UE_LOG(LogTemp, Error, TEXT("EditorBatchGenerationSubsystem: Error: %s"), *LastErrorMessage);
-		UE_LOG(LogTemp, Error, TEXT("EditorBatchGenerationSubsystem: Call StopBatchGeneration() or StartBatchGeneration() to retry"));
-		bLoggedError = true;
-	}
-
-	// Reset flag when leaving error state
-	if (CurrentState != EBatchGenState::Error)
-	{
-		bLoggedError = false;
-	}
+	// Log error state
+	UE_LOG(LogTemp, Error, TEXT("EditorBatchGenerationSubsystem: === Error State ==="));
+	UE_LOG(LogTemp, Error, TEXT("EditorBatchGenerationSubsystem: Error: %s"), *LastErrorMessage);
+	UE_LOG(LogTemp, Error, TEXT("EditorBatchGenerationSubsystem: Call StopBatchGeneration() or StartBatchGeneration() to retry"));
 }
 
 // ============================================================================
@@ -331,7 +306,8 @@ void UEditorBatchGenerationSubsystem::HandleErrorState()
 
 void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 	FMetaHumanBodyParametricConfig& OutBodyConfig,
-	FMetaHumanAppearanceConfig& OutAppearanceConfig)
+	FMetaHumanAppearanceConfig& OutAppearanceConfig,
+	FString& OutCharacterName)
 {
 	int32 RandomBodyTypeIndex = FMath::RandRange(0, 17);
 	OutBodyConfig.BodyType = static_cast<EMetaHumanBodyType>(RandomBodyTypeIndex);
@@ -340,7 +316,13 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 	OutBodyConfig.bUseParametricBody = true;
 	OutBodyConfig.BodyMeasurements.Empty();
 
-	OutBodyConfig.BodyMeasurements.Add(TEXT("Masculine/Feminine"), FMath::FRandRange(-1.5f, 1.5f));
+	float MasculineFeminine = FMath::FRandRange(-1.5f, 1.5f);
+	bool bIsFemale = true;
+	if (MasculineFeminine < 0.0f) 
+	{
+		bIsFemale = false;
+	}
+	OutBodyConfig.BodyMeasurements.Add(TEXT("Masculine/Feminine"), MasculineFeminine);
 	OutBodyConfig.BodyMeasurements.Add(TEXT("Muscularity"), FMath::FRandRange(-1.f, 1.f));
 	OutBodyConfig.BodyMeasurements.Add(TEXT("Fat"), FMath::FRandRange(-0.5f, 2.0f));
 	OutBodyConfig.BodyMeasurements.Add(TEXT("Height"), FMath::FRandRange(150.0f, 195.0f));
@@ -348,6 +330,7 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 	OutBodyConfig.QualityLevel = QualityLevelConfig;
 
 	int32 EthnicityRoll = FMath::RandRange(1, 100);
+	FString EthnicityCode;
 
 	if (EthnicityRoll <= 90)
 	{
@@ -365,16 +348,19 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 		OutAppearanceConfig.EyesSettings.EyeRight.Iris.SecondaryColorV = 0.0f;
 
 		OutAppearanceConfig.WardrobeConfig.HairParameters->Melanin = 1.0f;
+		EthnicityCode = TEXT("AS"); // Asian
 	}
 	else if (EthnicityRoll <= 95)
 	{
 		OutAppearanceConfig.SkinSettings.Skin.U = FMath::FRandRange(0.0f, 0.2f);
 		OutAppearanceConfig.SkinSettings.Skin.V = FMath::FRandRange(0.4f, 1.0f);
+		EthnicityCode = TEXT("AF"); // African
 	}
 	else
 	{
 		OutAppearanceConfig.SkinSettings.Skin.U = FMath::FRandRange(0.6f, 1.0f);
 		OutAppearanceConfig.SkinSettings.Skin.V = FMath::FRandRange(0.0f, 1.0f);
+		EthnicityCode = TEXT("EU"); // European
 	}
 
 	// OutAppearanceConfig.WardrobeConfig.HairParameters->Redness = FMath::FRandRange(0.0f, 1.0f);
@@ -399,15 +385,53 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 	OutAppearanceConfig.SkinSettings.Skin.Roughness = FMath::FRandRange(0.0f, 1.0f);
 	OutAppearanceConfig.SkinSettings.Skin.bShowTopUnderwear = true;
 	OutAppearanceConfig.SkinSettings.Skin.BodyTextureIndex = FMath::RandRange(0, 8);
-	OutAppearanceConfig.SkinSettings.Skin.FaceTextureIndex = FMath::RandRange(0, 152);
+	// see I:\UE_5.6\Engine\Plugins\MetaHuman\MetaHumanCharacter\Content\Optional\TextureSynthesis\TS-1.3-D_UE_res-1024_nchr-153\texture_attributes.json
+	//a['attributes']['Face Stubble']['values']          
+	// [0, 3, 1, 1, 2, 0, 3, 0, 3, 1, 0, 1, 0, 2, 0, 3, 0, 0, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 2, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 
+    //  0, 1, 0, 1, 1, 0, 0, 2, 0, 0, 2, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 1, 2, 0, 0, 1, 0, 3, 0, 2, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 2, 0, 0, 2, 0, 0, 3, 0, 0, 0, 2, 0, 3, 2, 0, 0, 0, 1, 0, 3, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 1, 0, 2, 2, 2, 0, 3, 0, 0, 1, 0, 2, 1, 0, 1, 1, 0, 2, 0, 1, 0, 3]
+	// 0-1 for female, 0-3 for male
+	const TArray<int32> FaceTextureStubbleMapp = {0, 3, 1, 1, 2, 0, 3, 0, 3, 1, 0, 1, 0, 2, 0, 3, 0, 0, 0, 1, 0, 2, 0, 2, 0, 2, 0, 2, 2, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 2, 0, 0, 2, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 1, 2, 0, 0, 1, 0, 3, 0, 2, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 2, 0, 0, 2, 0, 0, 3, 0, 0, 0, 2, 0, 3, 2, 0, 0, 0, 1, 0, 3, 0, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 1, 0, 2, 2, 2, 0, 3, 0, 0, 1, 0, 2, 1, 0, 1, 1, 0, 2, 0, 1, 0, 3};
+	TArray<int32> FemaleFaceTextureIndexSet;
+	TArray<int32> MaleFaceTextureIndexSet;
+	for (int32 Index = 0; Index < FaceTextureStubbleMapp.Num(); ++Index)
+	{
+		int32 StubbleValue = FaceTextureStubbleMapp[Index];
+		if (StubbleValue >= 0 && StubbleValue <= 1)
+		{
+			FemaleFaceTextureIndexSet.Add(Index);
+		}
+		if (StubbleValue >= 0 && StubbleValue <= 3)
+		{
+			MaleFaceTextureIndexSet.Add(Index);
+		}
+	}
+	int32 RandomIndex;
+	if (bIsFemale)
+	{
+		RandomIndex = FemaleFaceTextureIndexSet[FMath::RandRange(0, FemaleFaceTextureIndexSet.Num() - 1)];
+	}
+	else
+	{
+		RandomIndex = MaleFaceTextureIndexSet[FMath::RandRange(0, MaleFaceTextureIndexSet.Num() - 1)];
+	}
+	OutAppearanceConfig.SkinSettings.Skin.FaceTextureIndex = RandomIndex;
+	// OutAppearanceConfig.SkinSettings.Skin.FaceTextureIndex = FMath::RandRange(0, 152);
 
-	OutAppearanceConfig.SkinSettings.Freckles.Density = FMath::FRandRange(0.0f, 1.0f);
-	OutAppearanceConfig.SkinSettings.Freckles.Strength = FMath::FRandRange(0.0f, 1.0f);
+	if (EthnicityCode == TEXT("AS")) // Asian
+	{
+		OutAppearanceConfig.SkinSettings.Freckles.Density = FMath::FRandRange(0.0f, 0.5f);
+		OutAppearanceConfig.SkinSettings.Freckles.Strength = FMath::FRandRange(0.0f, 0.5f);
+	}
+	else
+	{
+		OutAppearanceConfig.SkinSettings.Freckles.Density = FMath::FRandRange(0.0f, 1.0f);
+		OutAppearanceConfig.SkinSettings.Freckles.Strength = FMath::FRandRange(0.0f, 1.0f);
+	}
 	OutAppearanceConfig.SkinSettings.Freckles.Saturation = FMath::FRandRange(0.0f, 1.0f);
 	OutAppearanceConfig.SkinSettings.Freckles.ToneShift = FMath::FRandRange(0.0f, 1.0f);
 
 	int32 FrecklesRoll = FMath::RandRange(1, 100);
-	if (FrecklesRoll <= 60)
+	if (FrecklesRoll <= 70)
 	{
 		OutAppearanceConfig.SkinSettings.Freckles.Mask = EMetaHumanCharacterFrecklesMask::None;
 	}
@@ -417,17 +441,154 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 	}
 
 	OutAppearanceConfig.HeadModelSettings.Eyelashes.bEnableGrooms = false;
-}
 
-FString UEditorBatchGenerationSubsystem::GenerateUniqueCharacterName()
-{
+	// {
+	// 	// random hair from UE Metahuman Plugin Content
+	// 	FString BaseHairPath = TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair");
+	// 	FString RandomHairItem = UMetaHumanParametricGenerator::GetRandomWardrobeItemFromPath(TEXT("Hair"), BaseHairPath);
+	// 	OutAppearanceConfig.WardrobeConfig.HairPath = RandomHairItem;
+	// 	UE_LOG(LogTemp, Log, TEXT("Generated random hair item: %s"), *RandomHairItem);
+	// }
+	{
+		// Random hair from predefined list instead of MetaHuman plugin
+		// TArray<FString> AllHairPaths = {
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_UpdoBuns.WI_Hair_S_UpdoBuns"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_UpdoBraids.WI_Hair_S_UpdoBraids"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Updo.WI_Hair_S_Updo"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SweptUp.WI_Hair_S_SweptUp"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SlickBack.WI_Hair_S_SlickBack"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SideSweptFringe.WI_Hair_S_SideSweptFringe"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_RecedeMessy.WI_Hair_S_RecedeMessy"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_PulledBack.WI_Hair_S_PulledBack"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Pixie.WI_Hair_S_Pixie"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Messy.WI_Hair_S_Messy"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_LowPonytail.WI_Hair_S_LowPonytail"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_HairLoss.WI_Hair_S_HairLoss"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_CurlyFade.WI_Hair_S_CurlyFade"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Cornrows.WI_Hair_S_Cornrows"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_CoilBuzzCut.WI_Hair_S_CoilBuzzCut"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Coil.WI_Hair_S_Coil"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Clean.WI_Hair_S_Clean"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Casual.WI_Hair_S_Casual"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BuzzCut.WI_Hair_S_BuzzCut"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BrushCut.WI_Hair_S_BrushCut"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BobLayered.WI_Hair_S_BobLayered"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BaldingStubble.WI_Hair_S_BaldingStubble"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_AfroFade.WI_Hair_S_AfroFade"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_360Waves.WI_Hair_S_360Waves"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_TwistedBraids.WI_Hair_M_TwistedBraids"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_SideSweptFringe.WI_Hair_M_SideSweptFringe"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_Mohawk.WI_Hair_M_Mohawk"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_Layered.WI_Hair_M_Layered"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_FauxMohawk.WI_Hair_M_FauxMohawk"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobStraight.WI_Hair_M_BobStraight"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobSlick.WI_Hair_M_BobSlick"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobMessy.WI_Hair_M_BobMessy"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobCurly.WI_Hair_M_BobCurly"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobBangs.WI_Hair_M_BobBangs"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_StraightBangs.WI_Hair_L_StraightBangs"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_Straight.WI_Hair_L_Straight"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_MessyClumps.WI_Hair_L_MessyClumps"),
+		// 	TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_AfroCurly.WI_Hair_L_AfroCurly")
+		// };
+
+		TArray<FString> MaleHairPaths = {
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SlickBack.WI_Hair_S_SlickBack"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_RecedeMessy.WI_Hair_S_RecedeMessy"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_HairLoss.WI_Hair_S_HairLoss"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_CurlyFade.WI_Hair_S_CurlyFade"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_CoilBuzzCut.WI_Hair_S_CoilBuzzCut"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Clean.WI_Hair_S_Clean"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BuzzCut.WI_Hair_S_BuzzCut"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BrushCut.WI_Hair_S_BrushCut"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BaldingStubble.WI_Hair_S_BaldingStubble"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_AfroFade.WI_Hair_S_AfroFade"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_360Waves.WI_Hair_S_360Waves"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_TwistedBraids.WI_Hair_M_TwistedBraids"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_Mohawk.WI_Hair_M_Mohawk"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_FauxMohawk.WI_Hair_M_FauxMohawk"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_Layered.WI_Hair_M_Layered")
+		};
+		TArray<FString> FemaleHairPaths = {
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_UpdoBuns.WI_Hair_S_UpdoBuns"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_UpdoBraids.WI_Hair_S_UpdoBraids"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Updo.WI_Hair_S_Updo"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SweptUp.WI_Hair_S_SweptUp"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_PulledBack.WI_Hair_S_PulledBack"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Pixie.WI_Hair_S_Pixie"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_LowPonytail.WI_Hair_S_LowPonytail"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_StraightBangs.WI_Hair_L_StraightBangs"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_Straight.WI_Hair_L_Straight"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_MessyClumps.WI_Hair_L_MessyClumps"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_AfroCurly.WI_Hair_L_AfroCurly")
+		};
+		TArray<FString> UnisexHairPaths = {
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SideSweptFringe.WI_Hair_S_SideSweptFringe"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Messy.WI_Hair_S_Messy"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Casual.WI_Hair_S_Casual"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Coil.WI_Hair_S_Coil"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Cornrows.WI_Hair_S_Cornrows"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_SideSweptFringe.WI_Hair_M_SideSweptFringe"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobStraight.WI_Hair_M_BobStraight"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobSlick.WI_Hair_M_BobSlick"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobMessy.WI_Hair_M_BobMessy"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobCurly.WI_Hair_M_BobCurly"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobBangs.WI_Hair_M_BobBangs"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BobLayered.WI_Hair_S_BobLayered")
+		};
+		TArray<FString> FinalHairPaths;
+		if (bIsFemale)
+		{
+			FinalHairPaths = FemaleHairPaths;
+			FinalHairPaths.Append(UnisexHairPaths);
+		}
+		else
+		{
+			FinalHairPaths = MaleHairPaths;
+			FinalHairPaths.Append(UnisexHairPaths);
+		}
+
+		int32 Index = FMath::RandRange(0, FinalHairPaths.Num() - 1);
+		OutAppearanceConfig.WardrobeConfig.HairPath = FinalHairPaths[Index];
+		UE_LOG(LogTemp, Log, TEXT("Generated random hair item: %s"), *FinalHairPaths[Index]);
+	}
+
+
+
+	{
+		// random clothing from UE Metahuman Plugin Content
+		FString BaseClothingPath = TEXT("/MetaHumanCharacter/Optional/Clothing");
+		// Get random clothing item
+		FString RandomClothingItem = UMetaHumanParametricGenerator::GetRandomWardrobeItemFromPath(TEXT("Outfits"), BaseClothingPath);
+		OutAppearanceConfig.WardrobeConfig.ClothingPaths.Empty();
+		OutAppearanceConfig.WardrobeConfig.ClothingPaths.Add(RandomClothingItem);
+		UE_LOG(LogTemp, Log, TEXT("Generated random clothing item: %s"), *RandomClothingItem);
+	}
+	{
+		TArray<FString> UpAndDownCloth = {
+			TEXT("/MetaHumanCharacter/Optional/Clothing/WI_DefaultGarment.WI_DefaultGarment")
+		};
+		TArray<FString> UpCloth = { };
+		TArray<FString> DownCloth = { };
+		TArray<FString> Shoes = { };
+
+		TArray<FString> FullSuit = { };
+		TArray<FString> OtherItems = { };
+	}
+
+	// Generate character name based on ethnicity and gender
 	FDateTime Now = FDateTime::Now();
+	FString GenderCode = bIsFemale ? TEXT("F") : TEXT("M");
 
-	// Format: RandomChar_MMDD_HHMMSS
-	FString Name = FString::Printf(TEXT("BatchGen_RandomChar_%02d%02d_%02d%02d%02d"),
+	OutCharacterName = FString::Printf(TEXT("%s-%s-BatchGen-%02d%02d_%02d%02d%02d"),
+		*EthnicityCode,
+		*GenderCode,
 		Now.GetMonth(), Now.GetDay(),
 		Now.GetHour(), Now.GetMinute(), Now.GetSecond());
 
-	return Name;
+	// Log the character info for debugging
+	UE_LOG(LogTemp, Log, TEXT("Generated character: %s (Ethnicity: %s, Gender: %s)"),
+		*OutCharacterName, *EthnicityCode, bIsFemale ? TEXT("Female") : TEXT("Male"));
 }
+
 

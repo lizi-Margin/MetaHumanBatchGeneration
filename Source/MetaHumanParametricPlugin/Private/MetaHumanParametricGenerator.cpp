@@ -104,57 +104,48 @@ bool UMetaHumanParametricGenerator::PrepareAndRigCharacter(
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Step 2/4] ✓ Configuration complete"));
 
-	UE_LOG(LogTemp, Log, TEXT("[Step 2.5/4] Adding random hair and clothing..."));
-	FString RandomHairPath = GetRandomWardrobeItemFromPath(
-		TEXT("Hair"),
-		TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair")
-	);
-	if (!RandomHairPath.IsEmpty())
-	{
-		if (AddHair(Character, RandomHairPath))
-		{
-			UE_LOG(LogTemp, Log, TEXT("  ✓ Random hair added"));
+	UE_LOG(LogTemp, Log, TEXT("[Step 2.5/4] Adding selected hair and clothing..."));
 
-			if (ApplyHairParameters(Character, AppearanceConfig.WardrobeConfig.HairParameters))
-			{
-				UE_LOG(LogTemp, Log, TEXT("  ✓ Hair parameters applied"));
-			}
-			else
-			{
-				UE_LOG(LogTemp, Warning, TEXT("  Failed to apply hair parameters"));
-			}
-		}
-		else
+	// Apply selected hair from wardrobe config
+	if (AppearanceConfig.WardrobeConfig.HairPath.IsEmpty())
+	{
+		UE_LOG(LogTemp, Error, TEXT("  Hair path is empty in wardrobe config"));
+		return false;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("  Adding hair: %s"), *AppearanceConfig.WardrobeConfig.HairPath);
+	if (!AddHair(Character, AppearanceConfig.WardrobeConfig.HairPath))
+	{
+		UE_LOG(LogTemp, Error, TEXT("  Failed to add hair"));
+		return false;
+	}
+
+	if (!ApplyHairParameters(Character, AppearanceConfig.WardrobeConfig.HairParameters))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("  Failed to apply hair parameters"));
+	}
+
+	// Apply selected clothing from wardrobe config
+	for (const FString& ClothingPath : AppearanceConfig.WardrobeConfig.ClothingPaths)
+	{
+		UE_LOG(LogTemp, Log, TEXT("  Adding clothing: %s"), *ClothingPath);
+		if (!AddClothing(Character, ClothingPath))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("  Failed to add random hair"));
+			UE_LOG(LogTemp, Error, TEXT("  Failed to add clothing"));
+			return false;
 		}
 	}
 
-	FString RandomClothingPath = GetRandomWardrobeItemFromPath(
-		TEXT("Outfits"),
-		TEXT("/MetaHumanCharacter/Optional/Clothing")
-	);
-	if (!RandomClothingPath.IsEmpty())
+	// Apply wardrobe color parameters
+	if (ApplyWardrobeColorParameters(Character, AppearanceConfig.WardrobeConfig.ColorConfig))
 	{
-		if (AddClothing(Character, RandomClothingPath))
-		{
-			UE_LOG(LogTemp, Log, TEXT("  ✓ Random clothing added"));
-
-			// Apply wardrobe color parameters
-			if (ApplyWardrobeColorParameters(Character, AppearanceConfig.WardrobeConfig.ColorConfig))
-			{
-				UE_LOG(LogTemp, Log, TEXT("  ✓ Wardrobe color parameters applied"));
-			}
-			else
-			{
-				UE_LOG(LogTemp, Warning, TEXT("  Failed to apply wardrobe color parameters"));
-			}
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("  Failed to add random clothing"));
-		}
+		UE_LOG(LogTemp, Log, TEXT("  ✓ Wardrobe color parameters applied"));
 	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("  Failed to apply wardrobe color parameters"));
+	}
+
 	UE_LOG(LogTemp, Log, TEXT("[Step 2.5/4] ✓ Wardrobe items added"));
 
 	// Step 3: Download texture source data
@@ -1044,7 +1035,7 @@ FString UMetaHumanParametricGenerator::GetRandomWardrobeItemFromPath(const FName
 	UE_LOG(LogTemp, Log, TEXT("All wardrobe items in path %s:"), *ContentPath);
 	for (const FAssetData& Asset : AssetDataList)
 	{
-		UE_LOG(LogTemp, Log, TEXT("%s"), *Asset.GetSoftObjectPath().GetAssetName());
+		UE_LOG(LogTemp, Log, TEXT("%s"), *Asset.GetSoftObjectPath().ToString());
 	}
 	UE_LOG(LogTemp, Log, TEXT("Randomly selected wardrobe item [%d/%d]: %s"), 
 		RandomIndex + 1, AssetDataList.Num(), *AssetPath);

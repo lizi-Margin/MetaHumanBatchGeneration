@@ -114,10 +114,18 @@ struct FMetaHumanWardrobeConfig
 	UPROPERTY()
 	FMetaHumanWardrobeColorConfig ColorConfig;
 
+	UPROPERTY()
+	FString HairPath;
+
+	UPROPERTY()
+	TArray<FString> ClothingPaths;
+
 	FMetaHumanWardrobeConfig()
 	{
 		HairParameters = NewObject<UMetaHumanDefaultGroomPipelineMaterialParameters>();
 		ColorConfig = FMetaHumanWardrobeColorConfig();
+		HairPath = TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair");
+		ClothingPaths.Add(TEXT("/MetaHumanCharacter/Optional/Clothing"));
 	}
 };
 
@@ -303,7 +311,7 @@ public:
 		UMetaHumanCharacter* Character,
 		const FMetaHumanWardrobeColorConfig& ColorConfig);
 
-private: 
+	private: 
 	static UMetaHumanCharacterEditorSubsystem* getEditorSubsystem();
 
 private:
