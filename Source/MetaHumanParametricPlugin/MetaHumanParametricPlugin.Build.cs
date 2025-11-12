@@ -27,20 +27,19 @@ public class MetaHumanParametricPlugin : ModuleRules
 				"CoreUObject",
 				"Engine",
 				"UnrealEd",
-				"EditorSubsystem",              // UEditorSubsystem base class
+				"EditorSubsystem",
+				"StructUtils",
 
-				// MetaHuman 核心模块
-				"MetaHumanCharacter",           // UMetaHumanCharacter
-				"MetaHumanCharacterEditor",     // UMetaHumanCharacterEditorSubsystem
-				"MetaHumanCoreTechLib",         // FMetaHumanCharacterBodyIdentity
-				"MetaHumanSDKRuntime",          // EMetaHumanBodyType
-				"MetaHumanSDKEditor",           // MetaHuman SDK Editor
+				"MetaHumanCharacter",
+				"MetaHumanCharacterEditor",
+				"MetaHumanCoreTechLib",
+				"MetaHumanSDKRuntime",
+				"MetaHumanSDKEditor",
+				"MetaHumanDefaultPipeline",
 
-				// RigLogic 依赖
-				"RigLogicLib",                  // DNA 系统库
-				"RigLogicModule",               // DNA 模块
+				"RigLogicLib",
+				"RigLogicModule",
 
-				// UI 依赖
 				"Slate",
 				"SlateCore"
 			}

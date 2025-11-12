@@ -111,8 +111,9 @@ private:
 	// Random Parameter Generation
 	// ============================================================================
 
-	FMetaHumanBodyParametricConfig GenerateRandomBodyConfig();
-	FMetaHumanAppearanceConfig GenerateRandomAppearanceConfig();
+	void GenerateRandomCharacterConfigs(
+		FMetaHumanBodyParametricConfig& OutBodyConfig,
+		FMetaHumanAppearanceConfig& OutAppearanceConfig);
 	FString GenerateUniqueCharacterName();
 
 	// ============================================================================

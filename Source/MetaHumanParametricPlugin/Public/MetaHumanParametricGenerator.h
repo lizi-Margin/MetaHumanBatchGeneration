@@ -20,6 +20,7 @@
 #include "MetaHumanCharacterBodyIdentity.h"
 #include "MetaHumanBodyType.h"
 #include "MetaHumanCollection.h"
+#include "Item/MetaHumanDefaultGroomPipeline.h"
 
 // Unreal Engine Headers
 #include "Engine/SkeletalMesh.h"
@@ -72,52 +73,47 @@ struct FMetaHumanBodyParametricConfig
 
 	FMetaHumanBodyParametricConfig()
 	{
-		// 默认身体测量值（单位：厘米）
-		BodyMeasurements.Add(TEXT("Height"), 170.0f);          // 身高
-		BodyMeasurements.Add(TEXT("Chest"), 90.0f);            // 胸围
-		BodyMeasurements.Add(TEXT("Waist"), 75.0f);            // 腰围
-		BodyMeasurements.Add(TEXT("Hips"), 95.0f);             // 臀围
-		BodyMeasurements.Add(TEXT("ShoulderWidth"), 40.0f);    // 肩宽
-		BodyMeasurements.Add(TEXT("ArmLength"), 60.0f);        // 臂长
-		BodyMeasurements.Add(TEXT("LegLength"), 85.0f);        // 腿长
+		// // 默认身体测量值（单位：厘米）
+		// BodyMeasurements.Add(TEXT("Height"), 170.0f);          // 身高
+		// BodyMeasurements.Add(TEXT("Chest"), 90.0f);            // 胸围
+		// BodyMeasurements.Add(TEXT("Waist"), 75.0f);            // 腰围
+		// BodyMeasurements.Add(TEXT("Hips"), 95.0f);             // 臀围
+		// BodyMeasurements.Add(TEXT("ShoulderWidth"), 40.0f);    // 肩宽
+		// BodyMeasurements.Add(TEXT("ArmLength"), 60.0f);        // 臂长
+		// BodyMeasurements.Add(TEXT("LegLength"), 85.0f);        // 腿长
 	}
 };
 
-/**
- * 皮肤和外观配置
- */
 USTRUCT(BlueprintType)
+struct FMetaHumanWardrobeConfig
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wardrobe")
+	TObjectPtr<UMetaHumanDefaultGroomPipelineMaterialParameters> HairParameters;
+
+	FMetaHumanWardrobeConfig()
+	{
+		HairParameters = NewObject<UMetaHumanDefaultGroomPipelineMaterialParameters>();
+	}
+};
+
+// USTRUCT(BlueprintType)
 struct FMetaHumanAppearanceConfig
 {
 	GENERATED_BODY()
 
-	// 皮肤UV坐标 (控制肤色)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skin", meta = (UIMin = "0.0", UIMax = "1.0"))
-	float SkinToneU = 0.5f;
+	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	FMetaHumanCharacterSkinSettings SkinSettings;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skin", meta = (UIMin = "0.0", UIMax = "1.0"))
-	float SkinToneV = 0.5f;
+	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	FMetaHumanCharacterEyesSettings EyesSettings;
 
-	// 皮肤粗糙度
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skin", meta = (UIMin = "0.0", UIMax = "2.0"))
-	float SkinRoughness = 1.06f;
+	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	FMetaHumanCharacterHeadModelSettings HeadModelSettings;
 
-	// 眼睛颜色配置
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Eyes")
-	EMetaHumanCharacterEyesIrisPattern IrisPattern = EMetaHumanCharacterEyesIrisPattern::Iris001;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Eyes", meta = (UIMin = "0.0", UIMax = "1.0"))
-	float IrisPrimaryColorU = 0.3f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Eyes", meta = (UIMin = "0.0", UIMax = "1.0"))
-	float IrisPrimaryColorV = 0.6f;
-
-	// 睫毛类型
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Eyelashes")
-	EMetaHumanCharacterEyelashesType EyelashesType = EMetaHumanCharacterEyelashesType::Thin;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Eyelashes")
-	bool bEnableEyelashGrooms = true;
+	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	FMetaHumanWardrobeConfig WardrobeConfig;
 };
 
 /**
@@ -221,6 +217,64 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Debug")
 	static void TestCloudAuthentication();
+
+	/**
+	 * 添加衣橱物品到角色（通用方法）
+	 *
+	 * @param Character - 要添加物品的角色
+	 * @param SlotName - 槽位名称 (例如: "Hair", "Outfits", "Beard", "Eyebrows", etc.)
+	 * @param WardrobeItemPath - 衣橱物品资源路径 (例如: "/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_Straight.WI_Hair_L_Straight")
+	 * @return 是否成功添加
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Wardrobe")
+	static bool AddWardrobeItem(
+		UMetaHumanCharacter* Character,
+		const FName& SlotName,
+		const FString& WardrobeItemPath);
+
+	/**
+	 * 添加头发到角色
+	 *
+	 * @param Character - 要添加头发的角色
+	 * @param HairAssetPath - 头发资源路径 (例如: "/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_Straight")
+	 * @return 是否成功添加
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Wardrobe")
+	static bool AddHair(UMetaHumanCharacter* Character, const FString& HairAssetPath);
+
+	/**
+	 * 添加服装到角色
+	 *
+	 * @param Character - 要添加服装的角色
+	 * @param ClothingAssetPath - 服装资源路径 (例如: "/MetaHumanCharacter/Optional/Clothing/WI_DefaultGarment")
+	 * @return 是否成功添加
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Wardrobe")
+	static bool AddClothing(UMetaHumanCharacter* Character, const FString& ClothingAssetPath);
+
+	/**
+	 * 移除槽位中的物品
+	 *
+	 * @param Character - 角色
+	 * @param SlotName - 槽位名称 (例如: "Hair", "Outfits")
+	 * @return 是否成功移除
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Wardrobe")
+	static bool RemoveWardrobeItem(UMetaHumanCharacter* Character, const FName& SlotName);
+
+	/**
+	 * 从指定目录随机选择一个衣橱物品
+	 *
+	 * @param SlotName - 槽位名称
+	 * @param ContentPath - 内容路径 (例如: "/MetaHumanCharacter/Optional/Grooms/Bindings/Hair")
+	 * @return 随机选择的物品路径（如果找到）
+	 */
+	static FString GetRandomWardrobeItemFromPath(const FName& SlotName, const FString& ContentPath);
+
+	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Wardrobe")
+	static bool ApplyHairParameters(
+		UMetaHumanCharacter* Character,
+		UMetaHumanDefaultGroomPipelineMaterialParameters* HairParams);
 
 private: 
 	static UMetaHumanCharacterEditorSubsystem* getEditorSubsystem();

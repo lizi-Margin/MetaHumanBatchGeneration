@@ -180,16 +180,16 @@ void UEditorBatchGenerationSubsystem::HandlePreparingState()
 {
 	UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: === Starting Character Preparation ==="));
 
-	// Generate random parameters
-	FMetaHumanBodyParametricConfig BodyConfig = GenerateRandomBodyConfig();
-	FMetaHumanAppearanceConfig AppearanceConfig = GenerateRandomAppearanceConfig();
+	FMetaHumanBodyParametricConfig BodyConfig;
+	FMetaHumanAppearanceConfig AppearanceConfig;
+	GenerateRandomCharacterConfigs(BodyConfig, AppearanceConfig);
+
 	CurrentCharacterName = GenerateUniqueCharacterName();
 
 	UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Character Name: %s"), *CurrentCharacterName);
 	UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Body Type: %s"), *UEnum::GetValueAsString(BodyConfig.BodyType));
 	UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Output Path: %s"), *OutputPathConfig);
 
-	// Call Step 1: Prepare and Rig
 	UMetaHumanCharacter* Character = nullptr;
 	bool bSuccess = UMetaHumanParametricGenerator::PrepareAndRigCharacter(
 		CurrentCharacterName,
@@ -329,74 +329,79 @@ void UEditorBatchGenerationSubsystem::HandleErrorState()
 // Random Parameter Generation
 // ============================================================================
 
-FMetaHumanBodyParametricConfig UEditorBatchGenerationSubsystem::GenerateRandomBodyConfig()
+void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
+	FMetaHumanBodyParametricConfig& OutBodyConfig,
+	FMetaHumanAppearanceConfig& OutAppearanceConfig)
 {
-	FMetaHumanBodyParametricConfig Config;
+	int32 RandomBodyTypeIndex = FMath::RandRange(0, 17);
+	OutBodyConfig.BodyType = static_cast<EMetaHumanBodyType>(RandomBodyTypeIndex);
 
-	// Randomly select body type
-	int32 RandomBodyTypeIndex = FMath::RandRange(0, 17); // 18 body types (0-17)
-	Config.BodyType = static_cast<EMetaHumanBodyType>(RandomBodyTypeIndex);
+	OutBodyConfig.GlobalDeltaScale = 1.0f;
+	OutBodyConfig.bUseParametricBody = true;
+	OutBodyConfig.BodyMeasurements.Empty();
 
-	// Global delta scale (usually keep at 1.0 for full effect)
-	Config.GlobalDeltaScale = 1.0f;
+	OutBodyConfig.BodyMeasurements.Add(TEXT("Masculine/Feminine"), FMath::FRandRange(-1.5f, 1.5f));
+	OutBodyConfig.BodyMeasurements.Add(TEXT("Muscularity"), FMath::FRandRange(-1.f, 1.f));
+	OutBodyConfig.BodyMeasurements.Add(TEXT("Fat"), FMath::FRandRange(-0.5f, 2.0f));
+	OutBodyConfig.BodyMeasurements.Add(TEXT("Height"), FMath::FRandRange(150.0f, 195.0f));
 
-	// Enable parametric body
-	Config.bUseParametricBody = true;
+	OutBodyConfig.QualityLevel = QualityLevelConfig;
 
-	// Generate random body measurements
-	Config.BodyMeasurements.Empty();
-	Config.BodyMeasurements.Add(TEXT("Height"), FMath::FRandRange(150.0f, 195.0f));
-	Config.BodyMeasurements.Add(TEXT("Chest"), FMath::FRandRange(75.0f, 120.0f));
-	Config.BodyMeasurements.Add(TEXT("Waist"), FMath::FRandRange(60.0f, 100.0f));
-	Config.BodyMeasurements.Add(TEXT("Hips"), FMath::FRandRange(80.0f, 120.0f));
-	Config.BodyMeasurements.Add(TEXT("ShoulderWidth"), FMath::FRandRange(35.0f, 55.0f));
-	Config.BodyMeasurements.Add(TEXT("ArmLength"), FMath::FRandRange(55.0f, 75.0f));
-	Config.BodyMeasurements.Add(TEXT("LegLength"), FMath::FRandRange(75.0f, 105.0f));
+	int32 EthnicityRoll = FMath::RandRange(1, 100);
 
-	// Quality level
-	Config.QualityLevel = QualityLevelConfig;
+	if (EthnicityRoll <= 90)
+	{
+		OutAppearanceConfig.SkinSettings.Skin.U = FMath::FRandRange(0.25f, 0.4f);
+		OutAppearanceConfig.SkinSettings.Skin.V = FMath::FRandRange(0.0f, 0.3f);
 
-	return Config;
-}
+		OutAppearanceConfig.EyesSettings.EyeLeft.Iris.PrimaryColorU = 0.0f;
+		OutAppearanceConfig.EyesSettings.EyeLeft.Iris.PrimaryColorV = 0.0f;
+		OutAppearanceConfig.EyesSettings.EyeLeft.Iris.SecondaryColorU = 0.0f;
+		OutAppearanceConfig.EyesSettings.EyeLeft.Iris.SecondaryColorV = 0.0f;
 
-FMetaHumanAppearanceConfig UEditorBatchGenerationSubsystem::GenerateRandomAppearanceConfig()
-{
-	FMetaHumanAppearanceConfig Config;
-	return Config;
+		OutAppearanceConfig.EyesSettings.EyeRight.Iris.PrimaryColorU = 0.0f;
+		OutAppearanceConfig.EyesSettings.EyeRight.Iris.PrimaryColorV = 0.0f;
+		OutAppearanceConfig.EyesSettings.EyeRight.Iris.SecondaryColorU = 0.0f;
+		OutAppearanceConfig.EyesSettings.EyeRight.Iris.SecondaryColorV = 0.0f;
 
-	// // Random skin tone (UV coordinates in 0-1 range)
-	// Config.SkinToneU = FMath::FRandRange(0.0f, 1.0f);
-	// Config.SkinToneV = FMath::FRandRange(0.0f, 1.0f);
+		OutAppearanceConfig.WardrobeConfig.HairParameters->Melanin = 1.0f;
+	}
+	else if (EthnicityRoll <= 95)
+	{
+		OutAppearanceConfig.SkinSettings.Skin.U = FMath::FRandRange(0.0f, 0.2f);
+		OutAppearanceConfig.SkinSettings.Skin.V = FMath::FRandRange(0.4f, 1.0f);
+	}
+	else
+	{
+		OutAppearanceConfig.SkinSettings.Skin.U = FMath::FRandRange(0.6f, 1.0f);
+		OutAppearanceConfig.SkinSettings.Skin.V = FMath::FRandRange(0.0f, 1.0f);
+	}
 
-	// // Skin roughness (0.5 - 1.5 is a reasonable range)
-	// Config.SkinRoughness = FMath::FRandRange(0.0f, 2.0f);
+	// OutAppearanceConfig.WardrobeConfig.HairParameters->Redness = FMath::FRandRange(0.0f, 1.0f);
+	OutAppearanceConfig.WardrobeConfig.HairParameters->Roughness = FMath::FRandRange(0.0f, 1.0f);
+	OutAppearanceConfig.WardrobeConfig.HairParameters->Whiteness = FMath::FRandRange(0.0f, 1.0f);
+	OutAppearanceConfig.WardrobeConfig.HairParameters->Lightness = FMath::FRandRange(0.0f, 1.0f);
 
-	// // Random iris pattern (there are multiple Iris patterns, let's use a random enum value)
-	// int32 RandomIrisPattern = FMath::RandRange(0, 9);   // !!!
-	// Config.IrisPattern = static_cast<EMetaHumanCharacterEyesIrisPattern>(RandomIrisPattern);
 
-	// // Random iris color
-	// Config.IrisPrimaryColorU = FMath::FRandRange(0.0f, 1.0f);
-	// Config.IrisPrimaryColorV = FMath::FRandRange(0.0f, 1.0f);
+	OutAppearanceConfig.SkinSettings.Skin.Roughness = FMath::FRandRange(0.0f, 1.0f);
+	OutAppearanceConfig.SkinSettings.Skin.bShowTopUnderwear = true;
+	OutAppearanceConfig.SkinSettings.Skin.BodyTextureIndex = FMath::RandRange(0, 8);
+	OutAppearanceConfig.SkinSettings.Skin.FaceTextureIndex = FMath::RandRange(0, 152);
 
-	// // Random eyelashes type
-	// int32 RandomEyelashType = FMath::RandRange(0, 6);  // !!!
-	// Config.EyelashesType = static_cast<EMetaHumanCharacterEyelashesType>(RandomEyelashType);
+	OutAppearanceConfig.SkinSettings.Freckles.Density = FMath::FRandRange(0.0f, 1.0f);
+	OutAppearanceConfig.SkinSettings.Freckles.Strength = FMath::FRandRange(0.0f, 1.0f);
+	OutAppearanceConfig.SkinSettings.Freckles.Saturation = FMath::FRandRange(0.0f, 1.0f);
+	OutAppearanceConfig.SkinSettings.Freckles.ToneShift = FMath::FRandRange(0.0f, 1.0f);
 
-	// // Enable eyelash grooms (randomly)
-	// Config.bEnableEyelashGrooms = FMath::RandBool();
+	int32 FrecklesRoll = FMath::RandRange(1, 100);
+	if (FrecklesRoll <= 60)
+	{
+		OutAppearanceConfig.SkinSettings.Freckles.Mask = EMetaHumanCharacterFrecklesMask::None;
+	}
+	else
+	{
+		OutAppearanceConfig.SkinSettings.Freckles.Mask = static_cast<EMetaHumanCharacterFrecklesMask>(FMath::RandRange(1, 3));
+	}
 
-	// return Config;
-}
-
-FString UEditorBatchGenerationSubsystem::GenerateUniqueCharacterName()
-{
-	FDateTime Now = FDateTime::Now();
-
-	// Format: RandomChar_MMDD_HHMMSS
-	FString Name = FString::Printf(TEXT("RandomChar_%02d%02d_%02d%02d%02d"),
-		Now.GetMonth(), Now.GetDay(),
-		Now.GetHour(), Now.GetMinute(), Now.GetSecond());
-
-	return Name;
+	OutAppearanceConfig.HeadModelSettings.Eyelashes.bEnableGrooms = false;
 }

@@ -9,9 +9,11 @@
 #include "MetaHumanCharacterEditorSubsystem.h"
 #include "MetaHumanCharacterBodyIdentity.h"
 #include "MetaHumanCollection.h"
+#include "MetaHumanCharacterInstance.h"
 #include "MetaHumanBodyType.h"
 #include "MetaHumanAssetIOUtility.h"
 #include "MetaHumanAssemblyPipelineManager.h"
+#include "MetaHumanWardrobeItem.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/SavePackage.h"
@@ -24,8 +26,10 @@
 #include "Tasks/Task.h"
 #include "Misc/DateTime.h"
 #include "Cloud/MetaHumanARServiceRequest.h"
-#include "Cloud/MetaHumanServiceRequest.h"  // For ServiceAuthentication namespace
+#include "Cloud/MetaHumanServiceRequest.h"
 #include <UObject/UnrealType.h>
+#include "Item/MetaHumanDefaultGroomPipeline.h"
+#include "StructUtils/InstancedPropertyBag.h"
 
 
 UMetaHumanCharacterEditorSubsystem* UMetaHumanParametricGenerator::getEditorSubsystem()
@@ -99,6 +103,49 @@ bool UMetaHumanParametricGenerator::PrepareAndRigCharacter(
 		return false;
 	}
 	UE_LOG(LogTemp, Log, TEXT("[Step 2/4] ✓ Configuration complete"));
+
+	UE_LOG(LogTemp, Log, TEXT("[Step 2.5/4] Adding random hair and clothing..."));
+	FString RandomHairPath = GetRandomWardrobeItemFromPath(
+		TEXT("Hair"),
+		TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair")
+	);
+	if (!RandomHairPath.IsEmpty())
+	{
+		if (AddHair(Character, RandomHairPath))
+		{
+			UE_LOG(LogTemp, Log, TEXT("  ✓ Random hair added"));
+
+			if (ApplyHairParameters(Character, AppearanceConfig.WardrobeConfig.HairParameters))
+			{
+				UE_LOG(LogTemp, Log, TEXT("  ✓ Hair parameters applied"));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("  Failed to apply hair parameters"));
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("  Failed to add random hair"));
+		}
+	}
+
+	FString RandomClothingPath = GetRandomWardrobeItemFromPath(
+		TEXT("Outfits"),
+		TEXT("/MetaHumanCharacter/Optional/Clothing")
+	);
+	if (!RandomClothingPath.IsEmpty())
+	{
+		if (AddClothing(Character, RandomClothingPath))
+		{
+			UE_LOG(LogTemp, Log, TEXT("  ✓ Random clothing added"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("  Failed to add random clothing"));
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("[Step 2.5/4] ✓ Wardrobe items added"));
 
 	// Step 3: Download texture source data
 	UE_LOG(LogTemp, Log, TEXT("[Step 3/4] Downloading texture source data..."));
@@ -404,67 +451,17 @@ bool UMetaHumanParametricGenerator::ConfigureAppearance(
 		return false;
 	}
 
-	// 1. Configure skin settings
-	UE_LOG(LogTemp, Log, TEXT("  - Configuring skin settings..."));
-	{
-		FMetaHumanCharacterSkinSettings SkinSettings;
-		SkinSettings.Skin.U = AppearanceConfig.SkinToneU;
-		SkinSettings.Skin.V = AppearanceConfig.SkinToneV;
-		SkinSettings.Skin.Roughness = AppearanceConfig.SkinRoughness;
+	UE_LOG(LogTemp, Log, TEXT("  - Applying skin settings..."));
+	EditorSubsystem->ApplySkinSettings(Character, AppearanceConfig.SkinSettings);
+	EditorSubsystem->CommitSkinSettings(Character, AppearanceConfig.SkinSettings);
 
-		// Apply and commit skin settings
-		EditorSubsystem->ApplySkinSettings(Character, SkinSettings);
-		EditorSubsystem->CommitSkinSettings(Character, SkinSettings);
+	UE_LOG(LogTemp, Log, TEXT("  - Applying eyes settings..."));
+	EditorSubsystem->ApplyEyesSettings(Character, AppearanceConfig.EyesSettings);
+	EditorSubsystem->CommitEyesSettings(Character, AppearanceConfig.EyesSettings);
 
-		UE_LOG(LogTemp, Log, TEXT("    • Skin Tone: (U=%.2f, V=%.2f)"),
-			AppearanceConfig.SkinToneU, AppearanceConfig.SkinToneV);
-		UE_LOG(LogTemp, Log, TEXT("    • Roughness: %.2f"), AppearanceConfig.SkinRoughness);
-	}
-
-	// 2. Configure eyes settings
-	UE_LOG(LogTemp, Log, TEXT("  - Configuring eyes settings..."));
-	{
-		FMetaHumanCharacterEyesSettings EyesSettings;
-
-		// Use the same settings for left and right eyes (can be set separately)
-		UE_LOG(LogTemp, Log, TEXT("    • Iris Pattern: %s"),
-			*UEnum::GetValueAsString(AppearanceConfig.IrisPattern));
-		UE_LOG(LogTemp, Log, TEXT("    • Iris Color: (U=%.2f, V=%.2f)"),
-			AppearanceConfig.IrisPrimaryColorU, AppearanceConfig.IrisPrimaryColorV);
-		EyesSettings.EyeLeft.Iris.IrisPattern = AppearanceConfig.IrisPattern;
-		EyesSettings.EyeLeft.Iris.PrimaryColorU = AppearanceConfig.IrisPrimaryColorU;
-		EyesSettings.EyeLeft.Iris.PrimaryColorV = AppearanceConfig.IrisPrimaryColorV;
-
-		EyesSettings.EyeRight.Iris.IrisPattern = AppearanceConfig.IrisPattern;
-		EyesSettings.EyeRight.Iris.PrimaryColorU = AppearanceConfig.IrisPrimaryColorU;
-		EyesSettings.EyeRight.Iris.PrimaryColorV = AppearanceConfig.IrisPrimaryColorV;
-
-		// Apply and commit eyes settings
-		EditorSubsystem->ApplyEyesSettings(Character, EyesSettings);
-		EditorSubsystem->CommitEyesSettings(Character, EyesSettings);
-
-		UE_LOG(LogTemp, Log, TEXT("    • Iris Pattern: %s"),
-			*UEnum::GetValueAsString(AppearanceConfig.IrisPattern));
-		UE_LOG(LogTemp, Log, TEXT("    • Iris Color: (U=%.2f, V=%.2f)"),
-			AppearanceConfig.IrisPrimaryColorU, AppearanceConfig.IrisPrimaryColorV);
-	}
-
-	// 3. Configure head model settings (eyelashes, etc.)
-	UE_LOG(LogTemp, Log, TEXT("  - Configuring head model (eyelashes)..."));
-	{
-		FMetaHumanCharacterHeadModelSettings HeadModelSettings;
-		HeadModelSettings.Eyelashes.Type = AppearanceConfig.EyelashesType;
-		HeadModelSettings.Eyelashes.bEnableGrooms = AppearanceConfig.bEnableEyelashGrooms;
-
-		// Apply and commit head model settings
-		EditorSubsystem->ApplyHeadModelSettings(Character, HeadModelSettings);
-		EditorSubsystem->CommitHeadModelSettings(Character, HeadModelSettings);
-
-		UE_LOG(LogTemp, Log, TEXT("    • Eyelashes Type: %s"),
-			*UEnum::GetValueAsString(AppearanceConfig.EyelashesType));
-		UE_LOG(LogTemp, Log, TEXT("    • Grooms Enabled: %s"),
-			AppearanceConfig.bEnableEyelashGrooms ? TEXT("Yes") : TEXT("No"));
-	}
+	UE_LOG(LogTemp, Log, TEXT("  - Applying head model settings..."));
+	EditorSubsystem->ApplyHeadModelSettings(Character, AppearanceConfig.HeadModelSettings);
+	EditorSubsystem->CommitHeadModelSettings(Character, AppearanceConfig.HeadModelSettings);
 
 	UE_LOG(LogTemp, Log, TEXT("  ✓ Appearance configuration complete"));
 	return true;
@@ -879,5 +876,242 @@ void UMetaHumanParametricGenerator::TestCloudAuthentication()
 			);
 		}
 	});
+}
+
+
+// ============================================================================
+// Wardrobe Item Management Functions
+// ============================================================================
+
+bool UMetaHumanParametricGenerator::AddWardrobeItem(
+	UMetaHumanCharacter* Character,
+	const FName& SlotName,
+	const FString& WardrobeItemPath)
+{
+	if (!Character)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid character for adding wardrobe item"));
+		return false;
+	}
+
+	TNotNull<UMetaHumanCollection*> Collection = Character->GetMutableInternalCollection();
+
+	const FMetaHumanCharacterPipelineSlot* Slot = Collection->GetPipeline()->GetSpecification()->Slots.Find(SlotName);
+	if (!Slot)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Slot '%s' not found in character pipeline"), *SlotName.ToString());
+		return false;
+	}
+
+	FSoftObjectPath SoftPath(WardrobeItemPath);
+	TSoftObjectPtr<UMetaHumanWardrobeItem> WardrobeItemRef{ SoftPath };
+
+	UMetaHumanWardrobeItem* WardrobeItem = WardrobeItemRef.LoadSynchronous();
+	if (!WardrobeItem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to load wardrobe item from path: %s"), *WardrobeItemPath);
+		return false;
+	}
+
+	const FMetaHumanCharacterPaletteItem* FoundItem = Collection->GetItems().FindByPredicate(
+		[&SoftPath, &SlotName](const FMetaHumanCharacterPaletteItem& Item)
+		{
+			return Item.SlotName == SlotName
+				&& Item.WardrobeItem
+				&& Item.WardrobeItem->IsExternal()
+				&& FSoftObjectPath(Item.WardrobeItem) == SoftPath;
+		});
+
+	FMetaHumanPaletteItemKey PaletteItemKey;
+	if (FoundItem)
+	{
+		PaletteItemKey = FoundItem->GetItemKey();
+		UE_LOG(LogTemp, Log, TEXT("Wardrobe item already attached, using existing key"));
+	}
+	else
+	{
+		if (!Collection->TryAddItemFromWardrobeItem(SlotName, WardrobeItem, PaletteItemKey))
+		{
+			UE_LOG(LogTemp, Error, TEXT("Failed to add wardrobe item '%s' to slot '%s'"), 
+				*GetNameSafe(WardrobeItem), *SlotName.ToString());
+			return false;
+		}
+		UE_LOG(LogTemp, Log, TEXT("Successfully added wardrobe item to collection"));
+	}
+
+	Collection->GetMutableDefaultInstance()->SetSingleSlotSelection(SlotName, PaletteItemKey);
+
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+	if (EditorSubsystem)
+	{
+		EditorSubsystem->RunCharacterEditorPipelineForPreview(Character);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("✓ Successfully added wardrobe item '%s' to slot '%s'"), 
+		*WardrobeItemPath, *SlotName.ToString());
+	return true;
+}
+
+bool UMetaHumanParametricGenerator::AddHair(UMetaHumanCharacter* Character, const FString& HairAssetPath)
+{
+	FString FullPath = HairAssetPath;
+	if (!FullPath.Contains(TEXT(".")))
+	{
+		int32 LastSlashIndex;
+		if (FullPath.FindLastChar('/', LastSlashIndex))
+		{
+			FString AssetName = FullPath.Mid(LastSlashIndex + 1);
+			FullPath = FString::Printf(TEXT("%s.%s"), *FullPath, *AssetName);
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Adding hair to character: %s"), *FullPath);
+	return AddWardrobeItem(Character, TEXT("Hair"), FullPath);
+}
+
+bool UMetaHumanParametricGenerator::AddClothing(UMetaHumanCharacter* Character, const FString& ClothingAssetPath)
+{
+	FString FullPath = ClothingAssetPath;
+	if (!FullPath.Contains(TEXT(".")))
+	{
+		int32 LastSlashIndex;
+		if (FullPath.FindLastChar('/', LastSlashIndex))
+		{
+			FString AssetName = FullPath.Mid(LastSlashIndex + 1);
+			FullPath = FString::Printf(TEXT("%s.%s"), *FullPath, *AssetName);
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Adding clothing to character: %s"), *FullPath);
+	return AddWardrobeItem(Character, TEXT("Outfits"), FullPath);
+}
+
+bool UMetaHumanParametricGenerator::RemoveWardrobeItem(UMetaHumanCharacter* Character, const FName& SlotName)
+{
+	if (!Character)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid character for removing wardrobe item"));
+		return false;
+	}
+
+	TNotNull<UMetaHumanCollection*> Collection = Character->GetMutableInternalCollection();
+	Collection->GetMutableDefaultInstance()->SetSingleSlotSelection(SlotName, FMetaHumanPaletteItemKey());
+
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+	if (EditorSubsystem)
+	{
+		EditorSubsystem->RunCharacterEditorPipelineForPreview(Character);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("✓ Removed wardrobe item from slot '%s'"), *SlotName.ToString());
+	return true;
+}
+
+FString UMetaHumanParametricGenerator::GetRandomWardrobeItemFromPath(const FName& SlotName, const FString& ContentPath)
+{
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+
+	FARFilter Filter;
+	Filter.PackagePaths.Add(*ContentPath);
+	Filter.ClassPaths.Add(UMetaHumanWardrobeItem::StaticClass()->GetClassPathName());
+	Filter.bRecursivePaths = true;
+
+	TArray<FAssetData> AssetDataList;
+	AssetRegistry.GetAssets(Filter, AssetDataList);
+
+	if (AssetDataList.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No wardrobe items found in path: %s"), *ContentPath);
+		return FString();
+	}
+
+	int32 RandomIndex = FMath::RandRange(0, AssetDataList.Num() - 1);
+	const FAssetData& SelectedAsset = AssetDataList[RandomIndex];
+
+	FString AssetPath = SelectedAsset.GetSoftObjectPath().ToString();
+	UE_LOG(LogTemp, Log, TEXT("Randomly selected wardrobe item [%d/%d]: %s"), 
+		RandomIndex + 1, AssetDataList.Num(), *AssetPath);
+
+	return AssetPath;
+}
+
+bool UMetaHumanParametricGenerator::ApplyHairParameters(
+	UMetaHumanCharacter* Character,
+	UMetaHumanDefaultGroomPipelineMaterialParameters* HairParams)
+{
+	if (!Character)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid character for applying hair parameters"));
+		return false;
+	}
+
+	if (!HairParams)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid hair parameters"));
+		return false;
+	}
+
+	TNotNull<UMetaHumanCollection*> Collection = Character->GetMutableInternalCollection();
+	UMetaHumanCharacterInstance* Instance = Collection->GetMutableDefaultInstance();
+	if (!Instance)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get character instance"));
+		return false;
+	}
+
+	const FName HairSlotName = TEXT("Hair");
+	const FMetaHumanCharacterInstanceSelection& InstanceSelection = Instance->GetSelection();
+	const auto* HairSelection = InstanceSelection.Selections.Find(HairSlotName);
+
+	if (!HairSelection || !HairSelection->IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No hair item selected for this character"));
+		return false;
+	}
+
+	FInstancedPropertyBag PropertyBag;
+
+	PropertyBag.AddProperty(GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, Melanin), EPropertyBagPropertyType::Float);
+	PropertyBag.SetValueFloat(GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, Melanin), HairParams->Melanin);
+
+	PropertyBag.AddProperty(GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, Redness), EPropertyBagPropertyType::Float);
+	PropertyBag.SetValueFloat(GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, Redness), HairParams->Redness);
+
+	PropertyBag.AddProperty(GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, Roughness), EPropertyBagPropertyType::Float);
+	PropertyBag.SetValueFloat(GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, Roughness), HairParams->Roughness);
+
+	PropertyBag.AddProperty(GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, Whiteness), EPropertyBagPropertyType::Float);
+	PropertyBag.SetValueFloat(GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, Whiteness), HairParams->Whiteness);
+
+	PropertyBag.AddProperty(GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, Lightness), EPropertyBagPropertyType::Float);
+	PropertyBag.SetValueFloat(GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, Lightness), HairParams->Lightness);
+
+	FPropertyBagPropertyDesc DyeColorDesc(
+		GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, DyeColor),
+		EPropertyBagPropertyType::Struct,
+		TBaseStructure<FLinearColor>::Get()
+	);
+	PropertyBag.AddProperties({ DyeColorDesc });
+	PropertyBag.SetValueStruct(
+		GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, DyeColor),
+		FConstStructView::Make(HairParams->DyeColor)
+	);
+
+	Instance->OverrideInstanceParameters(HairSelection->GetSelectedItemPath(), PropertyBag);
+
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+	if (EditorSubsystem)
+	{
+		EditorSubsystem->RunCharacterEditorPipelineForPreview(Character);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("✓ Successfully applied hair parameters"));
+	UE_LOG(LogTemp, Log, TEXT("  Melanin: %.2f, Redness: %.2f, Roughness: %.2f"),
+		HairParams->Melanin, HairParams->Redness, HairParams->Roughness);
+	UE_LOG(LogTemp, Log, TEXT("  Whiteness: %.2f, Lightness: %.2f"),
+		HairParams->Whiteness, HairParams->Lightness);
+
+	return true;
 }
 
