@@ -85,34 +85,57 @@ struct FMetaHumanBodyParametricConfig
 };
 
 USTRUCT(BlueprintType)
+struct FMetaHumanWardrobeColorConfig
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wardrobe Colors")
+	FLinearColor PrimaryColorShirt = FLinearColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wardrobe Colors")
+	FLinearColor PrimaryColorShort = FLinearColor::Blue;
+
+	FMetaHumanWardrobeColorConfig()
+	{
+		// Default colors
+		PrimaryColorShirt = FLinearColor(0.8f, 0.8f, 0.8f, 1.0f); // Light gray
+		PrimaryColorShort = FLinearColor(0.2f, 0.4f, 0.8f, 1.0f); // Blue
+	}
+};
+
+USTRUCT()
 struct FMetaHumanWardrobeConfig
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wardrobe")
+	UPROPERTY()
 	TObjectPtr<UMetaHumanDefaultGroomPipelineMaterialParameters> HairParameters;
+
+	UPROPERTY()
+	FMetaHumanWardrobeColorConfig ColorConfig;
 
 	FMetaHumanWardrobeConfig()
 	{
 		HairParameters = NewObject<UMetaHumanDefaultGroomPipelineMaterialParameters>();
+		ColorConfig = FMetaHumanWardrobeColorConfig();
 	}
 };
 
-// USTRUCT(BlueprintType)
+USTRUCT()
 struct FMetaHumanAppearanceConfig
 {
 	GENERATED_BODY()
 
-	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	UPROPERTY()
 	FMetaHumanCharacterSkinSettings SkinSettings;
 
-	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	UPROPERTY()
 	FMetaHumanCharacterEyesSettings EyesSettings;
 
-	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	UPROPERTY()
 	FMetaHumanCharacterHeadModelSettings HeadModelSettings;
 
-	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+	UPROPERTY()
 	FMetaHumanWardrobeConfig WardrobeConfig;
 };
 
@@ -149,7 +172,6 @@ public:
 	 * @param OutCharacter - 输出：创建的角色资产（未完成 rigging）
 	 * @return 是否成功创建并启动 AutoRig
 	 */
-	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Generation")
 	static bool PrepareAndRigCharacter(
 		const FString& CharacterName,
 		const FString& OutputPath,
@@ -275,6 +297,11 @@ public:
 	static bool ApplyHairParameters(
 		UMetaHumanCharacter* Character,
 		UMetaHumanDefaultGroomPipelineMaterialParameters* HairParams);
+
+	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Wardrobe")
+	static bool ApplyWardrobeColorParameters(
+		UMetaHumanCharacter* Character,
+		const FMetaHumanWardrobeColorConfig& ColorConfig);
 
 private: 
 	static UMetaHumanCharacterEditorSubsystem* getEditorSubsystem();

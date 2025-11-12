@@ -382,6 +382,19 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 	OutAppearanceConfig.WardrobeConfig.HairParameters->Whiteness = FMath::FRandRange(0.0f, 1.0f);
 	OutAppearanceConfig.WardrobeConfig.HairParameters->Lightness = FMath::FRandRange(0.0f, 1.0f);
 
+	// Randomize wardrobe colors
+	OutAppearanceConfig.WardrobeConfig.ColorConfig.PrimaryColorShirt = FLinearColor(
+		FMath::FRandRange(0.0f, 1.0f),  // R
+		FMath::FRandRange(0.0f, 1.0f),  // G
+		FMath::FRandRange(0.0f, 1.0f),  // B
+		1.0f  // A
+	);
+	OutAppearanceConfig.WardrobeConfig.ColorConfig.PrimaryColorShort = FLinearColor(
+		FMath::FRandRange(0.0f, 1.0f),  // R
+		FMath::FRandRange(0.0f, 1.0f),  // G
+		FMath::FRandRange(0.0f, 1.0f),  // B
+		1.0f  // A
+	);
 
 	OutAppearanceConfig.SkinSettings.Skin.Roughness = FMath::FRandRange(0.0f, 1.0f);
 	OutAppearanceConfig.SkinSettings.Skin.bShowTopUnderwear = true;
@@ -405,3 +418,16 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 
 	OutAppearanceConfig.HeadModelSettings.Eyelashes.bEnableGrooms = false;
 }
+
+FString UEditorBatchGenerationSubsystem::GenerateUniqueCharacterName()
+{
+	FDateTime Now = FDateTime::Now();
+
+	// Format: RandomChar_MMDD_HHMMSS
+	FString Name = FString::Printf(TEXT("BatchGen_RandomChar_%02d%02d_%02d%02d%02d"),
+		Now.GetMonth(), Now.GetDay(),
+		Now.GetHour(), Now.GetMinute(), Now.GetSecond());
+
+	return Name;
+}
+

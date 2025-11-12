@@ -11,6 +11,7 @@
 #include "MetaHumanCollection.h"
 #include "MetaHumanCharacterInstance.h"
 #include "MetaHumanBodyType.h"
+#include "MetaHumanPipelineSlotSelection.h"
 #include "MetaHumanAssetIOUtility.h"
 #include "MetaHumanAssemblyPipelineManager.h"
 #include "MetaHumanWardrobeItem.h"
@@ -29,7 +30,6 @@
 #include "Cloud/MetaHumanServiceRequest.h"
 #include <UObject/UnrealType.h>
 #include "Item/MetaHumanDefaultGroomPipeline.h"
-#include "StructUtils/InstancedPropertyBag.h"
 
 
 UMetaHumanCharacterEditorSubsystem* UMetaHumanParametricGenerator::getEditorSubsystem()
@@ -139,6 +139,16 @@ bool UMetaHumanParametricGenerator::PrepareAndRigCharacter(
 		if (AddClothing(Character, RandomClothingPath))
 		{
 			UE_LOG(LogTemp, Log, TEXT("  ✓ Random clothing added"));
+
+			// Apply wardrobe color parameters
+			if (ApplyWardrobeColorParameters(Character, AppearanceConfig.WardrobeConfig.ColorConfig))
+			{
+				UE_LOG(LogTemp, Log, TEXT("  ✓ Wardrobe color parameters applied"));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("  Failed to apply wardrobe color parameters"));
+			}
 		}
 		else
 		{
@@ -1030,6 +1040,12 @@ FString UMetaHumanParametricGenerator::GetRandomWardrobeItemFromPath(const FName
 	const FAssetData& SelectedAsset = AssetDataList[RandomIndex];
 
 	FString AssetPath = SelectedAsset.GetSoftObjectPath().ToString();
+	// print all wardrobe items
+	UE_LOG(LogTemp, Log, TEXT("All wardrobe items in path %s:"), *ContentPath);
+	for (const FAssetData& Asset : AssetDataList)
+	{
+		UE_LOG(LogTemp, Log, TEXT("%s"), *Asset.GetSoftObjectPath().GetAssetName());
+	}
 	UE_LOG(LogTemp, Log, TEXT("Randomly selected wardrobe item [%d/%d]: %s"), 
 		RandomIndex + 1, AssetDataList.Num(), *AssetPath);
 
@@ -1061,15 +1077,20 @@ bool UMetaHumanParametricGenerator::ApplyHairParameters(
 	}
 
 	const FName HairSlotName = TEXT("Hair");
-	const FMetaHumanCharacterInstanceSelection& InstanceSelection = Instance->GetSelection();
-	const auto* HairSelection = InstanceSelection.Selections.Find(HairSlotName);
+	const TArray<FMetaHumanPipelineSlotSelectionData>& SlotSelections = Instance->GetSlotSelectionData();
 
-	if (!HairSelection || !HairSelection->IsValid())
+	FMetaHumanPaletteItemKey HairItemKey;
+	if (!UMetaHumanCharacterInstance::TryGetAnySlotSelection(
+		SlotSelections,
+		FMetaHumanPaletteItemPath::Collection,
+		HairSlotName,
+		HairItemKey))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("No hair item selected for this character"));
 		return false;
 	}
 
+	FMetaHumanPipelineSlotSelection HairSelection(HairSlotName, HairItemKey);
 	FInstancedPropertyBag PropertyBag;
 
 	PropertyBag.AddProperty(GET_MEMBER_NAME_CHECKED(UMetaHumanDefaultGroomPipelineMaterialParameters, Melanin), EPropertyBagPropertyType::Float);
@@ -1098,7 +1119,7 @@ bool UMetaHumanParametricGenerator::ApplyHairParameters(
 		FConstStructView::Make(HairParams->DyeColor)
 	);
 
-	Instance->OverrideInstanceParameters(HairSelection->GetSelectedItemPath(), PropertyBag);
+	Instance->OverrideInstanceParameters(HairSelection.GetSelectedItemPath(), PropertyBag);
 
 	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
 	if (EditorSubsystem)
@@ -1111,6 +1132,87 @@ bool UMetaHumanParametricGenerator::ApplyHairParameters(
 		HairParams->Melanin, HairParams->Redness, HairParams->Roughness);
 	UE_LOG(LogTemp, Log, TEXT("  Whiteness: %.2f, Lightness: %.2f"),
 		HairParams->Whiteness, HairParams->Lightness);
+
+	return true;
+}
+
+bool UMetaHumanParametricGenerator::ApplyWardrobeColorParameters(
+	UMetaHumanCharacter* Character,
+	const FMetaHumanWardrobeColorConfig& ColorConfig)
+{
+	if (!Character)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Invalid character for applying wardrobe color parameters"));
+		return false;
+	}
+
+	TNotNull<UMetaHumanCollection*> Collection = Character->GetMutableInternalCollection();
+	UMetaHumanCharacterInstance* Instance = Collection->GetMutableDefaultInstance();
+	if (!Instance)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get character instance"));
+		return false;
+	}
+
+	const FName OutfitsSlotName = TEXT("Outfits");
+	const TArray<FMetaHumanPipelineSlotSelectionData>& SlotSelections = Instance->GetSlotSelectionData();
+
+	FMetaHumanPaletteItemKey OutfitsItemKey;
+	if (!UMetaHumanCharacterInstance::TryGetAnySlotSelection(
+		SlotSelections,
+		FMetaHumanPaletteItemPath::Collection,
+		OutfitsSlotName,
+		OutfitsItemKey))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No outfit item selected for this character"));
+		return false;
+	}
+
+	FMetaHumanPipelineSlotSelection OutfitsSelection(OutfitsSlotName, OutfitsItemKey);
+	FInstancedPropertyBag PropertyBag;
+
+	FLinearColor ShirtColor = ColorConfig.PrimaryColorShirt;
+	FLinearColor ShortColor = ColorConfig.PrimaryColorShort;
+
+	// Add color parameters to the property bag
+	// Note: These parameter names ("PrimaryColorShirt", "PrimaryColorShort") need to match
+	// what's actually available in the specific outfit material. You may need to adjust these.
+
+	FPropertyBagPropertyDesc ShirtColorDesc(
+		TEXT("PrimaryColorShirt"),
+		EPropertyBagPropertyType::Struct,
+		TBaseStructure<FLinearColor>::Get()
+	);
+	PropertyBag.AddProperties({ ShirtColorDesc });
+	PropertyBag.SetValueStruct(
+		TEXT("PrimaryColorShirt"),
+		FConstStructView::Make(ShirtColor)
+	);
+
+	FPropertyBagPropertyDesc ShortColorDesc(
+		TEXT("PrimaryColorShort"),
+		EPropertyBagPropertyType::Struct,
+		TBaseStructure<FLinearColor>::Get()
+	);
+	PropertyBag.AddProperties({ ShortColorDesc });
+	PropertyBag.SetValueStruct(
+		TEXT("PrimaryColorShort"),
+		FConstStructView::Make(ShortColor)
+	);
+
+	// Apply the parameters to the instance
+	Instance->OverrideInstanceParameters(OutfitsSelection.GetSelectedItemPath(), PropertyBag);
+
+	// Update preview if in editor
+	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+	if (EditorSubsystem)
+	{
+		EditorSubsystem->RunCharacterEditorPipelineForPreview(Character);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("✓ Successfully applied wardrobe color parameters"));
+	UE_LOG(LogTemp, Log, TEXT("  Shirt Color: R=%.2f, G=%.2f, B=%.2f"), ShirtColor.R, ShirtColor.G, ShirtColor.B);
+	UE_LOG(LogTemp, Log, TEXT("  Short Color: R=%.2f, G=%.2f, B=%.2f"), ShortColor.R, ShortColor.G, ShortColor.B);
 
 	return true;
 }
