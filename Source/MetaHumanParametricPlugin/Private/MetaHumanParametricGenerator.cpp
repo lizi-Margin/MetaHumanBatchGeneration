@@ -168,6 +168,14 @@ bool UMetaHumanParametricGenerator::PrepareAndRigCharacter(
 
 	UE_LOG(LogTemp, Log, TEXT("[Step 3.5/5] ✓ Wardrobe items added"));
 
+	UE_LOG(LogTemp, Log, TEXT("Running character editor pipeline for preview..."));
+	UMetaHumanCharacterEditorSubsystem* PreviewSubsystem = getEditorSubsystem();
+	if (PreviewSubsystem)
+	{
+		PreviewSubsystem->RunCharacterEditorPipelineForPreview(Character);
+		UE_LOG(LogTemp, Log, TEXT("✓ Pipeline preview updated"));
+	}
+
 	// Step 5: Start AutoRig (ASYNC - returns immediately!)
 	UE_LOG(LogTemp, Log, TEXT("[Step 5/5] Starting AutoRig (async cloud operation)..."));
 
@@ -969,12 +977,6 @@ bool UMetaHumanParametricGenerator::AddWardrobeItem(
 		UE_LOG(LogTemp, Log, TEXT("  - Slot: %s, Item: %s"),
 			*SelectionData.Selection.SlotName.ToString(),
 			*SelectionData.Selection.SelectedItem.ToDebugString());
-	}
-
-	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
-	if (EditorSubsystem)
-	{
-		EditorSubsystem->RunCharacterEditorPipelineForPreview(Character);
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("✓ Successfully added wardrobe item '%s' to slot '%s'"),
