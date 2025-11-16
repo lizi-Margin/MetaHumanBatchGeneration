@@ -155,12 +155,25 @@ void FMetaHumanParametricPluginModule::AddToolbarExtension()
 
 			// Start Batch Generation
 			BatchSection.AddMenuEntry(
+				"StartBatch (Once)",
+				LOCTEXT("StartBatchLabel", "Start Batch Generation (Once)"),
+				LOCTEXT("StartBatchTooltip", "Start generating random characters in the background (Once)"),
+				FSlateIcon(),
+				FUIAction(FExecuteAction::CreateLambda([]() {
+					FMetaHumanParametricPluginModule::OnStartBatchGeneration(false);
+				}))
+			);
+
+			BatchSection.AddMenuEntry(
 				"StartBatch",
 				LOCTEXT("StartBatchLabel", "Start Batch Generation"),
 				LOCTEXT("StartBatchTooltip", "Start generating random characters in the background"),
 				FSlateIcon(),
-				FUIAction(FExecuteAction::CreateStatic(&FMetaHumanParametricPluginModule::OnStartBatchGeneration))
+				FUIAction(FExecuteAction::CreateLambda([]() {
+					FMetaHumanParametricPluginModule::OnStartBatchGeneration(true);
+				}))
 			);
+
 
 			// Check Batch Status
 			BatchSection.AddMenuEntry(
@@ -435,7 +448,7 @@ void FMetaHumanParametricPluginModule::OnStep2Assemble()
 // Batch Generation Callbacks
 // ============================================================================
 
-void FMetaHumanParametricPluginModule::OnStartBatchGeneration()
+void FMetaHumanParametricPluginModule::OnStartBatchGeneration(bool bLoopMode)
 {
 	UE_LOG(LogTemp, Warning, TEXT("=== Starting Batch Generation ==="));
 
@@ -462,7 +475,8 @@ void FMetaHumanParametricPluginModule::OnStartBatchGeneration()
 
 	// Start batch generation
 	BatchSubsystem->StartBatchGeneration(
-		true,                                    // bLoopMode
+		// true,                                    // bLoopMode
+		bLoopMode,
 		TEXT("/Game/MetaHumans"),               // OutputPath
 		EMetaHumanQualityLevel::Cinematic,      // QualityLevel
 		2.0f,                                    // CheckInterval (check every 2 seconds)

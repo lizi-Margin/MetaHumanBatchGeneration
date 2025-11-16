@@ -15,6 +15,7 @@
 #include "MetaHumanAssetIOUtility.h"
 #include "MetaHumanAssemblyPipelineManager.h"
 #include "MetaHumanWardrobeItem.h"
+#include "MetaHumanConfigSerializer.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/SavePackage.h"
@@ -65,17 +66,29 @@ bool UMetaHumanParametricGenerator::PrepareAndRigCharacter(
 	UE_LOG(LogTemp, Log, TEXT("Character Name: %s"), *CharacterName);
 	UE_LOG(LogTemp, Log, TEXT("Output Path: %s"), *OutputPath);
 
-	// Step 0: Check authentication
-	UE_LOG(LogTemp, Log, TEXT("[Step 0/4] Verifying MetaHuman cloud services authentication..."));
+	// Step 0: Save configuration to JSON first (before any operations that might fail)
+	UE_LOG(LogTemp, Log, TEXT("[Step 0/5] Saving configuration to JSON..."));
+	if (!UMetaHumanConfigSerializer::SaveGenerationSession(CharacterName, OutputPath, BodyConfig, AppearanceConfig, TEXT("Preparing")))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to save configuration to JSON, but generation will continue"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Step 0/5] ✓ Configuration saved to JSON successfully"));
+	}
+
+	// Step 1: Check authentication
+	UE_LOG(LogTemp, Log, TEXT("[Step 1/5] Verifying MetaHuman cloud services authentication..."));
 	if (!EnsureCloudServicesLogin())
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to authenticate with MetaHuman cloud services!"));
+		UMetaHumanConfigSerializer::UpdateSessionStatus(CharacterName, TEXT("Failed_Authentication"));
 		return false;
 	}
-	UE_LOG(LogTemp, Log, TEXT("[Step 0/4] ✓ Authentication verified"));
+	UE_LOG(LogTemp, Log, TEXT("[Step 1/5] ✓ Authentication verified"));
 
-	// Step 1: Create base character
-	UE_LOG(LogTemp, Log, TEXT("[Step 1/4] Creating base MetaHuman Character asset..."));
+	// Step 2: Create base character
+	UE_LOG(LogTemp, Log, TEXT("[Step 2/5] Creating base MetaHuman Character asset..."));
 	UMetaHumanCharacter* Character = CreateBaseCharacter(
 		OutputPath,
 		CharacterName,
@@ -85,31 +98,35 @@ bool UMetaHumanParametricGenerator::PrepareAndRigCharacter(
 	if (!Character)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to create base character!"));
+		UMetaHumanConfigSerializer::UpdateSessionStatus(CharacterName, TEXT("Failed_CreateCharacter"));
 		return false;
 	}
-	UE_LOG(LogTemp, Log, TEXT("[Step 1/4] ✓ Base character created"));
+	UE_LOG(LogTemp, Log, TEXT("[Step 2/5] ✓ Base character created"));
 
-	// Step 2: Configure body and appearance
-	UE_LOG(LogTemp, Log, TEXT("[Step 2/4] Configuring body parameters and appearance..."));
+	// Step 3: Configure body and appearance
+	UE_LOG(LogTemp, Log, TEXT("[Step 3/5] Configuring body parameters and appearance..."));
 	if (!ConfigureBodyParameters(Character, BodyConfig))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to configure body parameters!"));
+		UMetaHumanConfigSerializer::UpdateSessionStatus(CharacterName, TEXT("Failed_ConfigureBody"));
 		return false;
 	}
 
 	if (!ConfigureAppearance(Character, AppearanceConfig))
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to configure appearance!"));
+		UMetaHumanConfigSerializer::UpdateSessionStatus(CharacterName, TEXT("Failed_ConfigureAppearance"));
 		return false;
 	}
-	UE_LOG(LogTemp, Log, TEXT("[Step 2/4] ✓ Configuration complete"));
+	UE_LOG(LogTemp, Log, TEXT("[Step 3/5] ✓ Configuration complete"));
 
-	UE_LOG(LogTemp, Log, TEXT("[Step 2.5/4] Adding selected hair and clothing..."));
+	UE_LOG(LogTemp, Log, TEXT("[Step 3.5/5] Adding selected hair and clothing..."));
 
 	// Apply selected hair from wardrobe config
 	if (AppearanceConfig.WardrobeConfig.HairPath.IsEmpty())
 	{
 		UE_LOG(LogTemp, Error, TEXT("  Hair path is empty in wardrobe config"));
+		UMetaHumanConfigSerializer::UpdateSessionStatus(CharacterName, TEXT("Failed_AddHair"));
 		return false;
 	}
 
@@ -117,6 +134,7 @@ bool UMetaHumanParametricGenerator::PrepareAndRigCharacter(
 	if (!AddHair(Character, AppearanceConfig.WardrobeConfig.HairPath))
 	{
 		UE_LOG(LogTemp, Error, TEXT("  Failed to add hair"));
+		UMetaHumanConfigSerializer::UpdateSessionStatus(CharacterName, TEXT("Failed_AddHair"));
 		return false;
 	}
 
@@ -126,47 +144,38 @@ bool UMetaHumanParametricGenerator::PrepareAndRigCharacter(
 	}
 
 	// Apply selected clothing from wardrobe config
-	for (const FString& ClothingPath : AppearanceConfig.WardrobeConfig.ClothingPaths)
+	for (int32 Index = 0; Index < AppearanceConfig.WardrobeConfig.ClothingPaths.Num(); ++Index)
 	{
-		UE_LOG(LogTemp, Log, TEXT("  Adding clothing: %s"), *ClothingPath);
-		if (!AddClothing(Character, ClothingPath))
+		const FString& ClothingPath = AppearanceConfig.WardrobeConfig.ClothingPaths[Index];
+		UE_LOG(LogTemp, Log, TEXT("  Adding clothing [%d]: %s"), Index, *ClothingPath);
+		if (!AddClothing(Character, ClothingPath, Index))
 		{
 			UE_LOG(LogTemp, Error, TEXT("  Failed to add clothing"));
+			UMetaHumanConfigSerializer::UpdateSessionStatus(CharacterName, TEXT("Failed_AddClothing"));
 			return false;
 		}
 	}
 
-	// Apply wardrobe color parameters
-	if (ApplyWardrobeColorParameters(Character, AppearanceConfig.WardrobeConfig.ColorConfig))
-	{
-		UE_LOG(LogTemp, Log, TEXT("  ✓ Wardrobe color parameters applied"));
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("  Failed to apply wardrobe color parameters"));
-	}
+	// // Apply wardrobe color parameters
+	// if (ApplyWardrobeColorParameters(Character, AppearanceConfig.WardrobeConfig.ColorConfig))
+	// {
+	// 	UE_LOG(LogTemp, Log, TEXT("  ✓ Wardrobe color parameters applied"));
+	// }
+	// else
+	// {
+	// 	UE_LOG(LogTemp, Warning, TEXT("  Failed to apply wardrobe color parameters"));
+	// }
 
-	UE_LOG(LogTemp, Log, TEXT("[Step 2.5/4] ✓ Wardrobe items added"));
+	UE_LOG(LogTemp, Log, TEXT("[Step 3.5/5] ✓ Wardrobe items added"));
 
-	// Step 3: Download texture source data
-	UE_LOG(LogTemp, Log, TEXT("[Step 3/4] Downloading texture source data..."));
-	if (!DownloadTextureSourceData(Character))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Warning: Failed to download texture source data"));
-		// Continue anyway - might work without high-res textures
-	}
-	else
-	{
-		UE_LOG(LogTemp, Log, TEXT("[Step 3/4] ✓ Texture source data downloaded"));
-	}
-
-	// Step 4: Start AutoRig (ASYNC - returns immediately!)
-	UE_LOG(LogTemp, Log, TEXT("[Step 4/4] Starting AutoRig (async cloud operation)..."));
+	// Step 5: Start AutoRig (ASYNC - returns immediately!)
+	UE_LOG(LogTemp, Log, TEXT("[Step 5/5] Starting AutoRig (async cloud operation)..."));
 
 	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
 	if (!EditorSubsystem)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Failed to get editor subsystem"));
+		UMetaHumanConfigSerializer::UpdateSessionStatus(CharacterName, TEXT("Failed_GetEditorSubsystem"));
 		return false;
 	}
 
@@ -175,6 +184,7 @@ bool UMetaHumanParametricGenerator::PrepareAndRigCharacter(
 	if (RigState == EMetaHumanCharacterRigState::Rigged)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Character already rigged, ready for assembly"));
+		UMetaHumanConfigSerializer::UpdateSessionStatus(CharacterName, TEXT("Rigged"));
 		OutCharacter = Character;
 		return true;
 	}
@@ -191,10 +201,13 @@ bool UMetaHumanParametricGenerator::PrepareAndRigCharacter(
 	// Start AutoRig (asynchronous - returns immediately!)
 	EditorSubsystem->AutoRigFace(Character, UE::MetaHuman::ERigType::JointsAndBlendshapes);
 
-	UE_LOG(LogTemp, Log, TEXT("[Step 4/4] ✓ AutoRig started (running in background)"));
+	UE_LOG(LogTemp, Log, TEXT("[Step 5/5] ✓ AutoRig started (running in background)"));
 	UE_LOG(LogTemp, Log, TEXT("=== Step 1 Complete - AutoRig is now running in the background ==="));
 	UE_LOG(LogTemp, Log, TEXT("Use GetRiggingStatusString() to check progress"));
 	UE_LOG(LogTemp, Log, TEXT("When rigged, call AssembleCharacter() to finish"));
+
+	// Update configuration status to AutoRigging
+	UMetaHumanConfigSerializer::UpdateSessionStatus(CharacterName, TEXT("AutoRigging"));
 
 	OutCharacter = Character;
 	return true;
@@ -245,6 +258,17 @@ bool UMetaHumanParametricGenerator::AssembleCharacter(
 
 	UE_LOG(LogTemp, Log, TEXT("✓ Character is rigged, proceeding with assembly..."));
 
+	// Step 4: Download texture source data
+	UE_LOG(LogTemp, Log, TEXT("Downloading texture source data..."));
+	if (!DownloadTextureSourceData(Character))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Warning: Failed to download texture source data"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT(" ✓ Texture source data downloaded"));
+	}
+
 	// Assemble using native pipeline
 	FMetaHumanAssemblyBuildParameters BuildParams =
 		UMetaHumanAssemblyPipelineManager::CreateDefaultBuildParameters(
@@ -263,6 +287,20 @@ bool UMetaHumanParametricGenerator::AssembleCharacter(
 	UE_LOG(LogTemp, Log, TEXT("  Quality Level: %s"), *UEnum::GetValueAsString(QualityLevel));
 	UE_LOG(LogTemp, Log, TEXT("  Output Path: %s"), *OutputPath);
 	UE_LOG(LogTemp, Log, TEXT("=== Step 2 Complete - Character is ready! ==="));
+
+	// Update session status to completed
+	if (Character->GetName() != TEXT("None"))
+	{
+		UE_LOG(LogTemp, Log, TEXT("Updating session status to completed..."));
+		if (!UMetaHumanConfigSerializer::UpdateSessionStatus(Character->GetName(), TEXT("Completed")))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Failed to update session status, but character was assembled successfully"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("Session status updated successfully"));
+		}
+	}
 
 	return true;
 }
@@ -560,53 +598,22 @@ bool UMetaHumanParametricGenerator::DownloadTextureSourceData_Impl(UMetaHumanCha
 	EditorSubsystem->RequestHighResolutionTextures(Character, ERequestTextureResolution::Res2k);
 
 	// Wait for download to complete
-	const float MaxWaitTime = 120.0f; // Texture download may take more time
-	const float StartTime = FPlatformTime::Seconds();
-	float LastProgressReport = 0.0f;
 	bool bDownloadStarted = false;
 
-	while (EditorSubsystem->IsRequestingHighResolutionTextures(Character))
+	if (EditorSubsystem->IsRequestingHighResolutionTextures(Character))
 	{
-		const float ElapsedTime = FPlatformTime::Seconds() - StartTime;
 		bDownloadStarted = true;
-
-		// Report progress every 10 seconds
-		if (ElapsedTime - LastProgressReport > 10.0f)
-		{
-			UE_LOG(LogTemp, Log, TEXT("Still downloading textures... (%.1f seconds elapsed)"), ElapsedTime);
-			UE_LOG(LogTemp, Log, TEXT("  Make sure you're logged into MetaHuman cloud services in the editor"));
-			LastProgressReport = ElapsedTime;
-		}
-
-		if (ElapsedTime > MaxWaitTime)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Texture download timeout after %.1f seconds"), ElapsedTime);
-			UE_LOG(LogTemp, Warning, TEXT("  Possible causes:"));
-			UE_LOG(LogTemp, Warning, TEXT("  - Not logged into MetaHuman cloud services"));
-			UE_LOG(LogTemp, Warning, TEXT("  - Network connectivity issues"));
-			UE_LOG(LogTemp, Warning, TEXT("  - Service temporarily unavailable"));
-			break;
-		}
-
-		// In background thread, no need to manually handle editor tick
-		FPlatformProcess::Sleep(1.0f); // Background thread can use longer sleep interval
 	}
 
-	const float TotalTime = FPlatformTime::Seconds() - StartTime;
 
-	if (bDownloadStarted && !EditorSubsystem->IsRequestingHighResolutionTextures(Character))
+	if (bDownloadStarted)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Texture download completed in %.1f seconds"), TotalTime);
-		return true;
-	}
-	else if (!bDownloadStarted)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Texture download is not running - likely it has finished"));
+		UE_LOG(LogTemp, Log, TEXT("Texture download started"));
 		return true;
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Texture download did not complete within timeout"));
+		UE_LOG(LogTemp, Warning, TEXT("Texture download is not running"));
 		return false;
 	}
 }
@@ -898,6 +905,13 @@ bool UMetaHumanParametricGenerator::AddWardrobeItem(
 	TNotNull<UMetaHumanCollection*> Collection = Character->GetMutableInternalCollection();
 
 	const FMetaHumanCharacterPipelineSlot* Slot = Collection->GetPipeline()->GetSpecification()->Slots.Find(SlotName);
+
+	UE_LOG(LogTemp, Log, TEXT("Available Slots:"));
+	for (const auto& SlotPair : Collection->GetPipeline()->GetSpecification()->Slots)
+	{
+		UE_LOG(LogTemp, Log, TEXT("  - %s"), *SlotPair.Key.ToString());
+	}
+
 	if (!Slot)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Slot '%s' not found in character pipeline"), *SlotName.ToString());
@@ -940,7 +954,22 @@ bool UMetaHumanParametricGenerator::AddWardrobeItem(
 		UE_LOG(LogTemp, Log, TEXT("Successfully added wardrobe item to collection"));
 	}
 
-	Collection->GetMutableDefaultInstance()->SetSingleSlotSelection(SlotName, PaletteItemKey);
+	FMetaHumanPipelineSlotSelection Selection(SlotName, PaletteItemKey);
+	if (!Collection->GetMutableDefaultInstance()->TryAddSlotSelection(Selection))
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to add slot selection for '%s' to slot '%s'"),
+			*WardrobeItemPath, *SlotName.ToString());
+		return false;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Current slot selections after adding:"));
+	const TArray<FMetaHumanPipelineSlotSelectionData>& CurrentSelections = Collection->GetMutableDefaultInstance()->GetSlotSelectionData();
+	for (const FMetaHumanPipelineSlotSelectionData& SelectionData : CurrentSelections)
+	{
+		UE_LOG(LogTemp, Log, TEXT("  - Slot: %s, Item: %s"),
+			*SelectionData.Selection.SlotName.ToString(),
+			*SelectionData.Selection.SelectedItem.ToDebugString());
+	}
 
 	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
 	if (EditorSubsystem)
@@ -948,7 +977,7 @@ bool UMetaHumanParametricGenerator::AddWardrobeItem(
 		EditorSubsystem->RunCharacterEditorPipelineForPreview(Character);
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("✓ Successfully added wardrobe item '%s' to slot '%s'"), 
+	UE_LOG(LogTemp, Log, TEXT("✓ Successfully added wardrobe item '%s' to slot '%s'"),
 		*WardrobeItemPath, *SlotName.ToString());
 	return true;
 }
@@ -970,7 +999,7 @@ bool UMetaHumanParametricGenerator::AddHair(UMetaHumanCharacter* Character, cons
 	return AddWardrobeItem(Character, TEXT("Hair"), FullPath);
 }
 
-bool UMetaHumanParametricGenerator::AddClothing(UMetaHumanCharacter* Character, const FString& ClothingAssetPath)
+bool UMetaHumanParametricGenerator::AddClothing(UMetaHumanCharacter* Character, const FString& ClothingAssetPath, int32 Index)
 {
 	FString FullPath = ClothingAssetPath;
 	if (!FullPath.Contains(TEXT(".")))
@@ -983,8 +1012,11 @@ bool UMetaHumanParametricGenerator::AddClothing(UMetaHumanCharacter* Character, 
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Adding clothing to character: %s"), *FullPath);
-	return AddWardrobeItem(Character, TEXT("Outfits"), FullPath);
+	// FName SlotName = (Index == 0) ? FName(TEXT("Outfits")) : FName(*FString::Printf(TEXT("Outfits_%d"), Index));
+	FName SlotName = TEXT("Outfits");
+
+	UE_LOG(LogTemp, Log, TEXT("Adding clothing to character: %s (Slot: %s)"), *FullPath, *SlotName.ToString());
+	return AddWardrobeItem(Character, SlotName, FullPath);
 }
 
 bool UMetaHumanParametricGenerator::RemoveWardrobeItem(UMetaHumanCharacter* Character, const FName& SlotName)

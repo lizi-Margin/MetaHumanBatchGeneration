@@ -29,6 +29,8 @@ public class MetaHumanParametricPlugin : ModuleRules
 				"UnrealEd",
 				"EditorSubsystem",
 				"StructUtils",
+				"Json",
+				"JsonUtilities",
 
 				"MetaHumanCharacter",
 				"MetaHumanCharacterEditor",

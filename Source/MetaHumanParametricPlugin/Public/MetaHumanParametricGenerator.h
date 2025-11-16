@@ -124,8 +124,9 @@ struct FMetaHumanWardrobeConfig
 	{
 		HairParameters = NewObject<UMetaHumanDefaultGroomPipelineMaterialParameters>();
 		ColorConfig = FMetaHumanWardrobeColorConfig();
-		HairPath = TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair");
-		ClothingPaths.Add(TEXT("/MetaHumanCharacter/Optional/Clothing"));
+		ClothingPaths.Add(
+			TEXT("/MetaHumanCharacter/Optional/Clothing/WI_DefaultGarment.WI_DefaultGarment")
+		);
 	}
 };
 
@@ -207,98 +208,38 @@ public:
 		const FString& OutputPath,
 		EMetaHumanQualityLevel QualityLevel);
 
-	/**
-	 * 检查角色的 Rigging 状态
-	 *
-	 * @param Character - 要检查的角色
-	 * @return Rigging 状态：Unrigged, RigPending, Rigged
-	 */
+
 	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Generation")
 	static FString GetRiggingStatusString(UMetaHumanCharacter* Character);
 
 
-	/**
-	 * 检查并确保用户已登录到 MetaHuman 云服务
-	 * 如果未登录，会尝试自动登录（使用持久化凭据）或打开浏览器登录门户
-	 *
-	 * @return true if user is logged in, false if login failed
-	 */
+
 	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Authentication")
 	static bool EnsureCloudServicesLogin();
 
-	/**
-	 * 异步检查用户是否已登录
-	 *
-	 * @param OnCheckComplete Callback with boolean result (true = logged in)
-	 */
+
 	static void CheckCloudServicesLoginAsync(TFunction<void(bool)> OnCheckComplete);
 
-	/**
-	 * 异步执行云服务登录
-	 * 先尝试持久化凭据登录，失败则打开浏览器账户门户登录
-	 *
-	 * @param OnLoginComplete Callback when login succeeds
-	 * @param OnLoginFailed Callback when login fails
-	 */
 	static void LoginToCloudServicesAsync(TFunction<void()> OnLoginComplete, TFunction<void()> OnLoginFailed);
 
-	/**
-	 * 测试云服务认证功能（调试用）
-	 */
 	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Debug")
 	static void TestCloudAuthentication();
 
-	/**
-	 * 添加衣橱物品到角色（通用方法）
-	 *
-	 * @param Character - 要添加物品的角色
-	 * @param SlotName - 槽位名称 (例如: "Hair", "Outfits", "Beard", "Eyebrows", etc.)
-	 * @param WardrobeItemPath - 衣橱物品资源路径 (例如: "/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_Straight.WI_Hair_L_Straight")
-	 * @return 是否成功添加
-	 */
 	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Wardrobe")
 	static bool AddWardrobeItem(
 		UMetaHumanCharacter* Character,
 		const FName& SlotName,
 		const FString& WardrobeItemPath);
 
-	/**
-	 * 添加头发到角色
-	 *
-	 * @param Character - 要添加头发的角色
-	 * @param HairAssetPath - 头发资源路径 (例如: "/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_Straight")
-	 * @return 是否成功添加
-	 */
 	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Wardrobe")
 	static bool AddHair(UMetaHumanCharacter* Character, const FString& HairAssetPath);
 
-	/**
-	 * 添加服装到角色
-	 *
-	 * @param Character - 要添加服装的角色
-	 * @param ClothingAssetPath - 服装资源路径 (例如: "/MetaHumanCharacter/Optional/Clothing/WI_DefaultGarment")
-	 * @return 是否成功添加
-	 */
 	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Wardrobe")
-	static bool AddClothing(UMetaHumanCharacter* Character, const FString& ClothingAssetPath);
+	static bool AddClothing(UMetaHumanCharacter* Character, const FString& ClothingAssetPath, int32 Index = 0);
 
-	/**
-	 * 移除槽位中的物品
-	 *
-	 * @param Character - 角色
-	 * @param SlotName - 槽位名称 (例如: "Hair", "Outfits")
-	 * @return 是否成功移除
-	 */
 	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Wardrobe")
 	static bool RemoveWardrobeItem(UMetaHumanCharacter* Character, const FName& SlotName);
 
-	/**
-	 * 从指定目录随机选择一个衣橱物品
-	 *
-	 * @param SlotName - 槽位名称
-	 * @param ContentPath - 内容路径 (例如: "/MetaHumanCharacter/Optional/Grooms/Bindings/Hair")
-	 * @return 随机选择的物品路径（如果找到）
-	 */
 	static FString GetRandomWardrobeItemFromPath(const FName& SlotName, const FString& ContentPath);
 
 	UFUNCTION(BlueprintCallable, Category = "MetaHuman|Wardrobe")
@@ -311,7 +252,9 @@ public:
 		UMetaHumanCharacter* Character,
 		const FMetaHumanWardrobeColorConfig& ColorConfig);
 
-	private: 
+	static bool DownloadTextureSourceData(UMetaHumanCharacter* Character);
+
+private: 
 	static UMetaHumanCharacterEditorSubsystem* getEditorSubsystem();
 
 private:
@@ -338,12 +281,6 @@ private:
 	static bool ConfigureAppearance(
 		UMetaHumanCharacter* Character,
 		const FMetaHumanAppearanceConfig& AppearanceConfig);
-
-	/**
-	 * 步骤 4: 下载纹理源数据（新增）
-	 * 在生成资产前下载所需的纹理源数据，避免 "Texture generated for assembly without source data" 错误
-	 */
-	static bool DownloadTextureSourceData(UMetaHumanCharacter* Character);
 
 	/**
 	 * 对角色进行 rigging

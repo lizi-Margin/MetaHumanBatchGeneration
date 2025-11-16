@@ -46,7 +46,7 @@ private:
 	static void OnTestAuthentication();
 
 	/** Batch Generation callbacks */
-	static void OnStartBatchGeneration();
+	static void OnStartBatchGeneration(bool bLoopMode = true);
 	static void OnStopBatchGeneration();
 	static void OnCheckBatchStatus();
 

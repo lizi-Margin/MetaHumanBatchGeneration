@@ -74,13 +74,6 @@ void UEditorBatchGenerationSubsystem::StopBatchGeneration()
 
 	UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Stopping batch generation"));
 
-	// Remove ticker delegate
-	if (TickerHandle.IsValid())
-	{
-		FTSTicker::GetCoreTicker().RemoveTicker(TickerHandle);
-		TickerHandle.Reset();
-	}
-
 	// Reset state
 	TransitionToState(EBatchGenState::Idle);
 	GeneratedCharacter.Reset();
@@ -202,6 +195,7 @@ void UEditorBatchGenerationSubsystem::HandlePreparingState()
 		GeneratedCharacter = Character;
 		UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: ✓ Preparation complete, AutoRig started"));
 		UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: Transitioning to WaitingForRig state"));
+		UMetaHumanParametricGenerator::DownloadTextureSourceData(Character);
 		TransitionToState(EBatchGenState::WaitingForRig);
 	}
 	else
@@ -231,8 +225,23 @@ void UEditorBatchGenerationSubsystem::HandleWaitingForRigState()
 	// Check if rigged
 	if (RigStatus.Contains(TEXT("Rigged")))
 	{
-		UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: ✓ AutoRig complete! Proceeding to assembly"));
-		TransitionToState(EBatchGenState::Assembling);
+		UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: ✓ AutoRig complete!"));
+
+		UMetaHumanCharacterEditorSubsystem* EditorSubsystem = GEditor->GetEditorSubsystem<UMetaHumanCharacterEditorSubsystem>();
+		if (!EditorSubsystem)
+		{
+			UE_LOG(LogTemp, Error, TEXT("EditorBatchGenerationSubsystem: Failed to get MetaHumanCharacterEditorSubsystem"));
+			LastErrorMessage = TEXT("Failed to get MetaHumanCharacterEditorSubsystem");
+			TransitionToState(EBatchGenState::Error);
+		}
+		if (!EditorSubsystem->IsRequestingHighResolutionTextures(GeneratedCharacter.Get()))
+		{
+			TransitionToState(EBatchGenState::Assembling);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: ✓ AutoRig complete! Downloading Texture."));
+		}
 	}
 	else if (RigStatus.Contains(TEXT("Unrigged")) && !RigStatus.Contains(TEXT("RigPending")))
 	{
@@ -309,8 +318,20 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 	FMetaHumanAppearanceConfig& OutAppearanceConfig,
 	FString& OutCharacterName)
 {
+	auto RandomChoice = [](const TArray<FString>& Array) -> FString
+	{
+		if (Array.Num() == 0)
+		{
+			UE_LOG(LogTemp, Error, TEXT("EditorBatchGenerationSubsystem: RandomChoice: Array is empty"));
+			return FString("");
+		}
+		int32 index = FMath::RandRange(0, Array.Num() - 1);
+		UE_LOG(LogTemp, Log, TEXT("EditorBatchGenerationSubsystem: RandomChoice: Selected %s from Array"), *Array[index]);
+		return Array[index];
+	};
 	int32 RandomBodyTypeIndex = FMath::RandRange(0, 17);
 	OutBodyConfig.BodyType = static_cast<EMetaHumanBodyType>(RandomBodyTypeIndex);
+	// OutBodyConfig.BodyType = EMetaHumanBodyType::BlendableBody;
 
 	OutBodyConfig.GlobalDeltaScale = 1.0f;
 	OutBodyConfig.bUseParametricBody = true;
@@ -324,7 +345,7 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 	}
 	OutBodyConfig.BodyMeasurements.Add(TEXT("Masculine/Feminine"), MasculineFeminine);
 	OutBodyConfig.BodyMeasurements.Add(TEXT("Muscularity"), FMath::FRandRange(-1.f, 1.f));
-	OutBodyConfig.BodyMeasurements.Add(TEXT("Fat"), FMath::FRandRange(-0.5f, 2.0f));
+	OutBodyConfig.BodyMeasurements.Add(TEXT("Fat"), FMath::FRandRange(-0.5f, 1.2f));
 	OutBodyConfig.BodyMeasurements.Add(TEXT("Height"), FMath::FRandRange(150.0f, 195.0f));
 
 	OutBodyConfig.QualityLevel = QualityLevelConfig;
@@ -396,7 +417,8 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 	for (int32 Index = 0; Index < FaceTextureStubbleMapp.Num(); ++Index)
 	{
 		int32 StubbleValue = FaceTextureStubbleMapp[Index];
-		if (StubbleValue >= 0 && StubbleValue <= 1)
+		// if (StubbleValue >= 0 && StubbleValue <= 1)
+		if (StubbleValue >= 0 && StubbleValue <= 0)
 		{
 			FemaleFaceTextureIndexSet.Add(Index);
 		}
@@ -493,48 +515,67 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 		// };
 
 		TArray<FString> MaleHairPaths = {
+			// 短发
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SlickBack.WI_Hair_S_SlickBack"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_RecedeMessy.WI_Hair_S_RecedeMessy"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SweptUp.WI_Hair_S_SweptUp"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_PulledBack.WI_Hair_S_PulledBack"), //狂怒 男主发型
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Messy.WI_Hair_S_Messy"),
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_HairLoss.WI_Hair_S_HairLoss"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_CurlyFade.WI_Hair_S_CurlyFade"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_CoilBuzzCut.WI_Hair_S_CoilBuzzCut"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Clean.WI_Hair_S_Clean"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_CurlyFade.WI_Hair_S_CurlyFade"),  // 短卷
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_CoilBuzzCut.WI_Hair_S_CoilBuzzCut"), //
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BuzzCut.WI_Hair_S_BuzzCut"),
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BrushCut.WI_Hair_S_BrushCut"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BaldingStubble.WI_Hair_S_BaldingStubble"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_AfroFade.WI_Hair_S_AfroFade"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_360Waves.WI_Hair_S_360Waves"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_TwistedBraids.WI_Hair_M_TwistedBraids"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_Mohawk.WI_Hair_M_Mohawk"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_FauxMohawk.WI_Hair_M_FauxMohawk"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_Layered.WI_Hair_M_Layered")
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Clean.WI_Hair_S_Clean"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_360Waves.WI_Hair_S_360Waves"),  // 短寸
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Casual.WI_Hair_S_Casual"),  // 商务短发
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Coil.WI_Hair_S_Coil"),
+
+			// 中短发 
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Pixie.WI_Hair_S_Pixie"),  // 类似碎盖 带刘海
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SideSweptFringe.WI_Hair_S_SideSweptFringe"),  // 普通三七分
+
+
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_RecedeMessy.WI_Hair_S_RecedeMessy"),  // 秃
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BaldingStubble.WI_Hair_S_BaldingStubble"), // 更秃
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_AfroFade.WI_Hair_S_AfroFade"),  // 短蓬松卷,
+			
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_Mohawk.WI_Hair_M_Mohawk"), // cyber phonk 发型 
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_FauxMohawk.WI_Hair_M_FauxMohawk"), // cyber phonk 发型
+			
 		};
 		TArray<FString> FemaleHairPaths = {
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_UpdoBuns.WI_Hair_S_UpdoBuns"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_UpdoBraids.WI_Hair_S_UpdoBraids"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Updo.WI_Hair_S_Updo"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SweptUp.WI_Hair_S_SweptUp"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_PulledBack.WI_Hair_S_PulledBack"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Pixie.WI_Hair_S_Pixie"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_LowPonytail.WI_Hair_S_LowPonytail"),
+			// 中长发
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_LowPonytail.WI_Hair_S_LowPonytail"), // 类似学生头
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_StraightBangs.WI_Hair_L_StraightBangs"),
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_Straight.WI_Hair_L_Straight"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_MessyClumps.WI_Hair_L_MessyClumps"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_AfroCurly.WI_Hair_L_AfroCurly")
+			TEXT("/Game/MHPKG/hair_l_highponytail/WI_Hair_L_HighPonytail.WI_Hair_L_HighPonytail"),
+
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_UpdoBuns.WI_Hair_S_UpdoBuns"), // 樱桃 短扎
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_UpdoBraids.WI_Hair_S_UpdoBraids"),  // 樱桃 短扎
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Updo.WI_Hair_S_Updo"), // 樱桃 短扎
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_Layered.WI_Hair_M_Layered")  // 西方男生微卷到肩
+
+			// bob 短发系列
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobStraight.WI_Hair_M_BobStraight"), // 直发蘑菇头
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobSlick.WI_Hair_M_BobSlick"),
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobMessy.WI_Hair_M_BobMessy"),  // 
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobCurly.WI_Hair_M_BobCurly"),  // 到肩 微卷
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobBangs.WI_Hair_M_BobBangs"),  // 到颈 哆啦/盖茨比Daisy头
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BobLayered.WI_Hair_S_BobLayered")  // 到颈 微卷
+
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_TwistedBraids.WI_Hair_M_TwistedBraids"), // 脏辫
+	
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_MessyClumps.WI_Hair_L_MessyClumps"),  // 指环王精灵女王发型
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_AfroCurly.WI_Hair_L_AfroCurly") //爆炸头
 		};
 		TArray<FString> UnisexHairPaths = {
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SideSweptFringe.WI_Hair_S_SideSweptFringe"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Messy.WI_Hair_S_Messy"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Casual.WI_Hair_S_Casual"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Coil.WI_Hair_S_Coil"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Cornrows.WI_Hair_S_Cornrows"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_SideSweptFringe.WI_Hair_M_SideSweptFringe"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobStraight.WI_Hair_M_BobStraight"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobSlick.WI_Hair_M_BobSlick"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobMessy.WI_Hair_M_BobMessy"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobCurly.WI_Hair_M_BobCurly"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_BobBangs.WI_Hair_M_BobBangs"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BobLayered.WI_Hair_S_BobLayered")
+			
+			
+			
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Cornrows.WI_Hair_S_Cornrows"), // 脏辫背头
+			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_M_SideSweptFringe.WI_Hair_M_SideSweptFringe"),  // 颈部长度 三七分 颈后微卷
+			
+			
 		};
 		TArray<FString> FinalHairPaths;
 		if (bIsFemale)
@@ -555,25 +596,91 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 
 
 
+	// {
+	// 	// random clothing from UE Metahuman Plugin Content
+	// 	FString BaseClothingPath = TEXT("/MetaHumanCharacter/Optional/Clothing");
+	// 	// Get random clothing item
+	// 	FString RandomClothingItem = UMetaHumanParametricGenerator::GetRandomWardrobeItemFromPath(TEXT("Outfits"), BaseClothingPath);
+	// 	OutAppearanceConfig.WardrobeConfig.ClothingPaths.Empty();
+	// 	OutAppearanceConfig.WardrobeConfig.ClothingPaths.Add(RandomClothingItem);
+	// 	UE_LOG(LogTemp, Log, TEXT("Generated random clothing item: %s"), *RandomClothingItem);
+	// }
 	{
-		// random clothing from UE Metahuman Plugin Content
-		FString BaseClothingPath = TEXT("/MetaHumanCharacter/Optional/Clothing");
-		// Get random clothing item
-		FString RandomClothingItem = UMetaHumanParametricGenerator::GetRandomWardrobeItemFromPath(TEXT("Outfits"), BaseClothingPath);
+		int32 Roll;
 		OutAppearanceConfig.WardrobeConfig.ClothingPaths.Empty();
-		OutAppearanceConfig.WardrobeConfig.ClothingPaths.Add(RandomClothingItem);
-		UE_LOG(LogTemp, Log, TEXT("Generated random clothing item: %s"), *RandomClothingItem);
-	}
-	{
-		TArray<FString> UpAndDownCloth = {
+		
+
+		const TArray<FString> UpperAndLowerCloth = {
 			TEXT("/MetaHumanCharacter/Optional/Clothing/WI_DefaultGarment.WI_DefaultGarment")
 		};
-		TArray<FString> UpCloth = { };
-		TArray<FString> DownCloth = { };
-		TArray<FString> Shoes = { };
+		const TArray<FString> UpperCloth = {
+			// New Ones
+			"/Game/GoodWI/Upper/WI_Puffer_Jacket.WI_Puffer_Jacket",
+			"/Game/GoodWI/Upper/WI_Shirts.WI_Shirts",
+			"/Game/GoodWI/Upper/WI_Sweater.WI_Sweater",
+			"/Game/GoodWI/Upper/WI_Tank_Top.WI_Tank_Top",
+			"/Game/GoodWI/Upper/WI_Track_Suit.WI_Track_Suit"
 
-		TArray<FString> FullSuit = { };
-		TArray<FString> OtherItems = { };
+			// "/Game/GoodWI/Upper/WI_Colorful_Sweats.WI_Colorful_Sweats",
+			// "/Game/GoodWI/Upper/WI_Red_Shirt.WI_Red_Shirt",
+			// "/Game/GoodWI/Upper/WI_SweaterNew.WI_SweaterNew",
+		};
+		const TArray<FString> LowerCloth = {
+			// New Ones
+			"/Game/GoodWI/Lower/WI_Bonkers.WI_Bonkers",
+			"/Game/GoodWI/Lower/WI_Cargo.WI_Cargo",
+			"/Game/GoodWI/Lower/WI_Jeans.WI_Jeans",
+			"/Game/GoodWI/Lower/WI_Pant.WI_Pant",  // Warning: this may cause collision with UpperCloth
+			"/Game/GoodWI/Lower/WI_Track_Pant.WI_Track_Pant"
+
+			// "/Game/GoodWI/Lower/WI_Baggy_Pants.WI_Baggy_Pants",
+			// "/Game/GoodWI/Lower/WI_Cyber_Punk_Pants.WI_Cyber_Punk_Pants",
+			// "/Game/GoodWI/Lower/WI_Jeans2.WI_Jeans2",
+			// "/Game/GoodWI/Lower/WI_Jeans_1.WI_Jeans_1",
+			// "/Game/GoodWI/Lower/WI_Jeans_3.WI_Jeans_3",
+		};
+
+		const TArray<FString> Shoes = {
+			"/Game/GoodWI/Shoes/WI_Short_Boots.WI_Short_Boots"
+		};
+
+		const TArray<FString> FullSuit = { };
+
+		const TArray<FString> OtherItems = {
+			"/Game/GoodWI/OtherItems/WI_Bag.WI_Bag"
+		};
+		
+		Roll = FMath::RandRange(1, 100);
+		if (Roll <= 5) // use UpperAndLowerCloth
+		{
+		 	OutAppearanceConfig.WardrobeConfig.ClothingPaths.Add(RandomChoice(UpperAndLowerCloth));
+		}
+		else
+		{
+			OutAppearanceConfig.WardrobeConfig.ClothingPaths.Add(RandomChoice(UpperCloth));
+			OutAppearanceConfig.WardrobeConfig.ClothingPaths.Add(RandomChoice(LowerCloth));
+		}
+
+		
+		// Shoes
+		Roll = FMath::RandRange(1, 100);
+		if (Roll <= 15) // Do not wear shoes
+		{
+			// pass
+		}
+		else
+		{
+			OutAppearanceConfig.WardrobeConfig.ClothingPaths.Add(RandomChoice(Shoes));
+		}
+		
+
+		// OtherItems
+		Roll = FMath::RandRange(1, 100);
+		if (Roll <= 10) // wear other items
+		{
+			OutAppearanceConfig.WardrobeConfig.ClothingPaths.Add(RandomChoice(OtherItems));
+		}
+
 	}
 
 	// Generate character name based on ethnicity and gender
