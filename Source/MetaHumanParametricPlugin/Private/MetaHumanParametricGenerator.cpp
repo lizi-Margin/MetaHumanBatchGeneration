@@ -16,6 +16,8 @@
 #include "MetaHumanAssemblyPipelineManager.h"
 #include "MetaHumanWardrobeItem.h"
 #include "MetaHumanConfigSerializer.h"
+#include "MetaHumanCollectionEditorPipeline.h"
+#include "MetaHumanPinnedSlotSelection.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "UObject/SavePackage.h"
@@ -31,6 +33,7 @@
 #include "Cloud/MetaHumanServiceRequest.h"
 #include <UObject/UnrealType.h>
 #include "Item/MetaHumanDefaultGroomPipeline.h"
+#include "Interfaces/ITargetPlatformManagerModule.h"
 
 
 UMetaHumanCharacterEditorSubsystem* UMetaHumanParametricGenerator::getEditorSubsystem()
@@ -147,33 +150,51 @@ bool UMetaHumanParametricGenerator::PrepareAndRigCharacter(
 	for (int32 Index = 0; Index < AppearanceConfig.WardrobeConfig.ClothingPaths.Num(); ++Index)
 	{
 		const FString& ClothingPath = AppearanceConfig.WardrobeConfig.ClothingPaths[Index];
-		UE_LOG(LogTemp, Log, TEXT("  Adding clothing [%d]: %s"), Index, *ClothingPath);
+		UE_LOG(LogTemp, Log, TEXT("  Adding clothing [%d/%d]: %s"), Index + 1, AppearanceConfig.WardrobeConfig.ClothingPaths.Num(), *ClothingPath);
 		if (!AddClothing(Character, ClothingPath, Index))
 		{
-			UE_LOG(LogTemp, Error, TEXT("  Failed to add clothing"));
+			UE_LOG(LogTemp, Error, TEXT("  Failed to add clothing [%d]"), Index);
 			UMetaHumanConfigSerializer::UpdateSessionStatus(CharacterName, TEXT("Failed_AddClothing"));
 			return false;
 		}
+		UE_LOG(LogTemp, Log, TEXT("  ✓ Clothing [%d/%d] added successfully"), Index + 1, AppearanceConfig.WardrobeConfig.ClothingPaths.Num());
 	}
 
-	// // Apply wardrobe color parameters
-	// if (ApplyWardrobeColorParameters(Character, AppearanceConfig.WardrobeConfig.ColorConfig))
-	// {
-	// 	UE_LOG(LogTemp, Log, TEXT("  ✓ Wardrobe color parameters applied"));
-	// }
-	// else
-	// {
-	// 	UE_LOG(LogTemp, Warning, TEXT("  Failed to apply wardrobe color parameters"));
-	// }
+	// Apply wardrobe color parameters
+	if (ApplyWardrobeColorParameters(Character, AppearanceConfig.WardrobeConfig.ColorConfig))
+	{
+		UE_LOG(LogTemp, Log, TEXT("  ✓ Wardrobe color parameters applied"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("  Failed to apply wardrobe color parameters"));
+	}
 
 	UE_LOG(LogTemp, Log, TEXT("[Step 3.5/5] ✓ Wardrobe items added"));
 
-	UE_LOG(LogTemp, Log, TEXT("Running character editor pipeline for preview..."));
-	UMetaHumanCharacterEditorSubsystem* PreviewSubsystem = getEditorSubsystem();
-	if (PreviewSubsystem)
+	UE_LOG(LogTemp, Log, TEXT("Building collection preview (required for Chaos clothing initialization)..."));
+	TNotNull<UMetaHumanCollection*> Collection = Character->GetMutableInternalCollection();
+	FInstancedStruct BuildInput;
+
+	const TObjectPtr<UScriptStruct> BuildInputStruct = Collection->GetEditorPipeline()->GetSpecification()->BuildInputStruct;
+	if (BuildInputStruct && BuildInputStruct->IsChildOf(FMetaHumanBuildInputBase::StaticStruct()))
 	{
-		PreviewSubsystem->RunCharacterEditorPipelineForPreview(Character);
-		UE_LOG(LogTemp, Log, TEXT("✓ Pipeline preview updated"));
+		BuildInput.InitializeAs(BuildInputStruct);
+		FMetaHumanBuildInputBase& TypedBuildInput = BuildInput.GetMutable<FMetaHumanBuildInputBase>();
+		TypedBuildInput.EditorPreviewCharacter = Character->GetInternalCollectionKey();
+
+		Collection->Build(
+			BuildInput,
+			EMetaHumanCharacterPaletteBuildQuality::Preview,
+			GetTargetPlatformManagerRef().GetRunningTargetPlatform(),
+			UMetaHumanCollection::FOnBuildComplete(),
+			Collection->GetDefaultInstance()->ToPinnedSlotSelections(EMetaHumanUnusedSlotBehavior::PinnedToEmpty));
+
+		UE_LOG(LogTemp, Log, TEXT("✓ Collection preview build triggered (Chaos clothing initialized)"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to get BuildInputStruct for preview build"));
 	}
 
 	// Step 5: Start AutoRig (ASYNC - returns immediately!)
@@ -914,15 +935,14 @@ bool UMetaHumanParametricGenerator::AddWardrobeItem(
 
 	const FMetaHumanCharacterPipelineSlot* Slot = Collection->GetPipeline()->GetSpecification()->Slots.Find(SlotName);
 
-	UE_LOG(LogTemp, Log, TEXT("Available Slots:"));
-	for (const auto& SlotPair : Collection->GetPipeline()->GetSpecification()->Slots)
-	{
-		UE_LOG(LogTemp, Log, TEXT("  - %s"), *SlotPair.Key.ToString());
-	}
-
 	if (!Slot)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Slot '%s' not found in character pipeline"), *SlotName.ToString());
+		UE_LOG(LogTemp, Log, TEXT("Available Slots:"));
+		for (const auto& SlotPair : Collection->GetPipeline()->GetSpecification()->Slots)
+		{
+			UE_LOG(LogTemp, Log, TEXT("  - %s"), *SlotPair.Key.ToString());
+		}
 		return false;
 	}
 
@@ -949,25 +969,33 @@ bool UMetaHumanParametricGenerator::AddWardrobeItem(
 	if (FoundItem)
 	{
 		PaletteItemKey = FoundItem->GetItemKey();
-		UE_LOG(LogTemp, Log, TEXT("Wardrobe item already attached, using existing key"));
+		UE_LOG(LogTemp, Log, TEXT("Wardrobe item already in collection, using existing key"));
 	}
 	else
 	{
 		if (!Collection->TryAddItemFromWardrobeItem(SlotName, WardrobeItem, PaletteItemKey))
 		{
-			UE_LOG(LogTemp, Error, TEXT("Failed to add wardrobe item '%s' to slot '%s'"), 
+			UE_LOG(LogTemp, Error, TEXT("Failed to add wardrobe item '%s' to slot '%s'"),
 				*GetNameSafe(WardrobeItem), *SlotName.ToString());
 			return false;
 		}
-		UE_LOG(LogTemp, Log, TEXT("Successfully added wardrobe item to collection"));
+		UE_LOG(LogTemp, Log, TEXT("Added wardrobe item to collection"));
 	}
 
-	FMetaHumanPipelineSlotSelection Selection(SlotName, PaletteItemKey);
-	if (!Collection->GetMutableDefaultInstance()->TryAddSlotSelection(Selection))
+	if (Slot->bAllowsMultipleSelection)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to add slot selection for '%s' to slot '%s'"),
-			*WardrobeItemPath, *SlotName.ToString());
-		return false;
+		UE_LOG(LogTemp, Log, TEXT("Slot '%s' allows multiple selections, using TryAddSlotSelection"), *SlotName.ToString());
+		FMetaHumanPipelineSlotSelection Selection(SlotName, PaletteItemKey);
+		if (!Collection->GetMutableDefaultInstance()->TryAddSlotSelection(Selection))
+		{
+			UE_LOG(LogTemp, Error, TEXT("Failed to add slot selection (TryAddSlotSelection returned false)"));
+			return false;
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("Slot '%s' allows only single selection, using SetSingleSlotSelection"), *SlotName.ToString());
+		Collection->GetMutableDefaultInstance()->SetSingleSlotSelection(SlotName, PaletteItemKey);
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("Current slot selections after adding:"));
@@ -1032,11 +1060,11 @@ bool UMetaHumanParametricGenerator::RemoveWardrobeItem(UMetaHumanCharacter* Char
 	TNotNull<UMetaHumanCollection*> Collection = Character->GetMutableInternalCollection();
 	Collection->GetMutableDefaultInstance()->SetSingleSlotSelection(SlotName, FMetaHumanPaletteItemKey());
 
-	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
-	if (EditorSubsystem)
-	{
-		EditorSubsystem->RunCharacterEditorPipelineForPreview(Character);
-	}
+	// UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+	// if (EditorSubsystem)
+	// {
+	// 	EditorSubsystem->RunCharacterEditorPipelineForPreview(Character);
+	// }
 
 	UE_LOG(LogTemp, Log, TEXT("✓ Removed wardrobe item from slot '%s'"), *SlotName.ToString());
 	return true;
@@ -1146,11 +1174,11 @@ bool UMetaHumanParametricGenerator::ApplyHairParameters(
 
 	Instance->OverrideInstanceParameters(HairSelection.GetSelectedItemPath(), PropertyBag);
 
-	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
-	if (EditorSubsystem)
-	{
-		EditorSubsystem->RunCharacterEditorPipelineForPreview(Character);
-	}
+	// UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+	// if (EditorSubsystem)
+	// {
+	// 	EditorSubsystem->RunCharacterEditorPipelineForPreview(Character);
+	// }
 
 	UE_LOG(LogTemp, Log, TEXT("✓ Successfully applied hair parameters"));
 	UE_LOG(LogTemp, Log, TEXT("  Melanin: %.2f, Redness: %.2f, Roughness: %.2f"),
@@ -1228,12 +1256,12 @@ bool UMetaHumanParametricGenerator::ApplyWardrobeColorParameters(
 	// Apply the parameters to the instance
 	Instance->OverrideInstanceParameters(OutfitsSelection.GetSelectedItemPath(), PropertyBag);
 
-	// Update preview if in editor
-	UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
-	if (EditorSubsystem)
-	{
-		EditorSubsystem->RunCharacterEditorPipelineForPreview(Character);
-	}
+	// // Update preview if in editor
+	// UMetaHumanCharacterEditorSubsystem* EditorSubsystem = getEditorSubsystem();
+	// if (EditorSubsystem)
+	// {
+	// 	EditorSubsystem->RunCharacterEditorPipelineForPreview(Character);
+	// }
 
 	UE_LOG(LogTemp, Log, TEXT("✓ Successfully applied wardrobe color parameters"));
 	UE_LOG(LogTemp, Log, TEXT("  Shirt Color: R=%.2f, G=%.2f, B=%.2f"), ShirtColor.R, ShirtColor.G, ShirtColor.B);
