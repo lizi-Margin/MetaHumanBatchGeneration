@@ -344,9 +344,9 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 		bIsFemale = false;
 	}
 	OutBodyConfig.BodyMeasurements.Add(TEXT("Masculine/Feminine"), MasculineFeminine);
-	OutBodyConfig.BodyMeasurements.Add(TEXT("Muscularity"), FMath::FRandRange(-1.f, 1.f));
-	OutBodyConfig.BodyMeasurements.Add(TEXT("Fat"), FMath::FRandRange(-0.5f, 1.2f));
-	OutBodyConfig.BodyMeasurements.Add(TEXT("Height"), FMath::FRandRange(150.0f, 195.0f));
+	OutBodyConfig.BodyMeasurements.Add(TEXT("Muscularity"), FMath::FRandRange(-1.5f, 1.5f));
+	OutBodyConfig.BodyMeasurements.Add(TEXT("Fat"), FMath::FRandRange(-0.5f, 1.0f));
+	OutBodyConfig.BodyMeasurements.Add(TEXT("Height"), FMath::FRandRange(150.0f, 185.0f));
 
 	OutBodyConfig.QualityLevel = QualityLevelConfig;
 
@@ -518,11 +518,11 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 			// 短发
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SlickBack.WI_Hair_S_SlickBack"),
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_SweptUp.WI_Hair_S_SweptUp"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_PulledBack.WI_Hair_S_PulledBack"), //狂怒 男主发型
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_PulledBack.WI_Hair_S_PulledBack"), //狂怒 男主发型
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Messy.WI_Hair_S_Messy"),
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_HairLoss.WI_Hair_S_HairLoss"),
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_CurlyFade.WI_Hair_S_CurlyFade"),  // 短卷
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_CoilBuzzCut.WI_Hair_S_CoilBuzzCut"), //
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_CoilBuzzCut.WI_Hair_S_CoilBuzzCut"), //
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BuzzCut.WI_Hair_S_BuzzCut"),
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_BrushCut.WI_Hair_S_BrushCut"),
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_Clean.WI_Hair_S_Clean"),
@@ -547,7 +547,7 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 			// 中长发
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_LowPonytail.WI_Hair_S_LowPonytail"), // 类似学生头
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_StraightBangs.WI_Hair_L_StraightBangs"),
-			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_Straight.WI_Hair_L_Straight"),
+			// TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_L_Straight.WI_Hair_L_Straight"),  // 容易看起来像西方人
 			TEXT("/Game/MHPKG/hair_l_highponytail/WI_Hair_L_HighPonytail.WI_Hair_L_HighPonytail"),
 
 			TEXT("/MetaHumanCharacter/Optional/Grooms/Bindings/Hair/WI_Hair_S_UpdoBuns.WI_Hair_S_UpdoBuns"), // 樱桃 短扎
@@ -615,15 +615,15 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 		};
 		const TArray<FString> UpperCloth = {
 			// New Ones
-			"/Game/GoodWI/Upper/WI_Puffer_Jacket.WI_Puffer_Jacket",
-			"/Game/GoodWI/Upper/WI_Shirts.WI_Shirts",
+			"/Game/GoodWI/Upper/WI_Puffer_Jacket.WI_Puffer_Jacket", //
+			// "/Game/GoodWI/Upper/WI_Shirts.WI_Shirts",  //下摆太长，容易穿模
 			"/Game/GoodWI/Upper/WI_Sweater.WI_Sweater",
 			"/Game/GoodWI/Upper/WI_Tank_Top.WI_Tank_Top",
 			"/Game/GoodWI/Upper/WI_Track_Suit.WI_Track_Suit"
 
-			// "/Game/GoodWI/Upper/WI_Colorful_Sweats.WI_Colorful_Sweats",
-			// "/Game/GoodWI/Upper/WI_Red_Shirt.WI_Red_Shirt",
-			// "/Game/GoodWI/Upper/WI_SweaterNew.WI_SweaterNew",
+
+			"/Game/GoodWI/Upper/WI_Red_Shirt.WI_Red_Shirt",
+			"/Game/GoodWI/Upper/WI_SweaterNew.WI_SweaterNew",
 		};
 		const TArray<FString> LowerCloth = {
 			// New Ones
@@ -633,11 +633,12 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 			"/Game/GoodWI/Lower/WI_Pant.WI_Pant",  // Warning: this may cause collision with UpperCloth
 			"/Game/GoodWI/Lower/WI_Track_Pant.WI_Track_Pant"
 
-			// "/Game/GoodWI/Lower/WI_Baggy_Pants.WI_Baggy_Pants",
-			// "/Game/GoodWI/Lower/WI_Cyber_Punk_Pants.WI_Cyber_Punk_Pants",
-			// "/Game/GoodWI/Lower/WI_Jeans2.WI_Jeans2",
-			// "/Game/GoodWI/Lower/WI_Jeans_1.WI_Jeans_1",
-			// "/Game/GoodWI/Lower/WI_Jeans_3.WI_Jeans_3",
+			"/Game/GoodWI/Lower/WI_Baggy_Pants.WI_Baggy_Pants",
+			"/Game/GoodWI/Lower/WI_Cyber_Punk_Pants.WI_Cyber_Punk_Pants",
+			"/Game/GoodWI/Lower/WI_Jeans2.WI_Jeans2",
+			"/Game/GoodWI/Lower/WI_Jeans_1.WI_Jeans_1",
+			"/Game/GoodWI/Lower/WI_Jeans_3.WI_Jeans_3",
+			"/Game/GoodWI/Upper/WI_Colorful_Sweats.WI_Colorful_Sweats",
 		};
 
 		const TArray<FString> Shoes = {
@@ -651,7 +652,7 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 		};
 		
 		Roll = FMath::RandRange(1, 100);
-		if (Roll <= 5) // use UpperAndLowerCloth
+		if (Roll <= 20) // use UpperAndLowerCloth
 		{
 		 	OutAppearanceConfig.WardrobeConfig.ClothingPaths.Add(RandomChoice(UpperAndLowerCloth));
 		}

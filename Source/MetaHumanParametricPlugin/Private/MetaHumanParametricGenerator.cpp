@@ -34,6 +34,7 @@
 #include <UObject/UnrealType.h>
 #include "Item/MetaHumanDefaultGroomPipeline.h"
 #include "Interfaces/ITargetPlatformManagerModule.h"
+#include "FileHelpers.h"
 
 
 UMetaHumanCharacterEditorSubsystem* UMetaHumanParametricGenerator::getEditorSubsystem()
@@ -317,7 +318,29 @@ bool UMetaHumanParametricGenerator::AssembleCharacter(
 	UE_LOG(LogTemp, Log, TEXT("  Output Path: %s"), *OutputPath);
 	UE_LOG(LogTemp, Log, TEXT("=== Step 2 Complete - Character is ready! ==="));
 
-	// Update session status to completed
+	UE_LOG(LogTemp, Log, TEXT("Saving all generated assets (SKM, Blueprint, etc.)..."));
+	bool bPromptUserToSave = false;
+	bool bSaveMapPackages = true;
+	bool bSaveContentPackages = true;
+	bool bFastSave = false;
+	bool bNotifyNoPackagesSaved = false;
+	bool bCanBeDeclined = false;
+
+	if (FEditorFileUtils::SaveDirtyPackages(
+		bPromptUserToSave,
+		bSaveMapPackages,
+		bSaveContentPackages,
+		bFastSave,
+		bNotifyNoPackagesSaved,
+		bCanBeDeclined))
+	{
+		UE_LOG(LogTemp, Log, TEXT("✓ All generated assets saved successfully"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to save some packages, but character was assembled"));
+	}
+
 	if (Character->GetName() != TEXT("None"))
 	{
 		UE_LOG(LogTemp, Log, TEXT("Updating session status to completed..."));
