@@ -619,7 +619,7 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 			// "/Game/GoodWI/Upper/WI_Shirts.WI_Shirts",  //下摆太长，容易穿模
 			"/Game/GoodWI/Upper/WI_Sweater.WI_Sweater",
 			"/Game/GoodWI/Upper/WI_Tank_Top.WI_Tank_Top",
-			"/Game/GoodWI/Upper/WI_Track_Suit.WI_Track_Suit"
+			"/Game/GoodWI/Upper/WI_Track_Suit.WI_Track_Suit",
 
 
 			"/Game/GoodWI/Upper/WI_Red_Shirt.WI_Red_Shirt",
@@ -631,7 +631,7 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 			"/Game/GoodWI/Lower/WI_Cargo.WI_Cargo",
 			"/Game/GoodWI/Lower/WI_Jeans.WI_Jeans",
 			"/Game/GoodWI/Lower/WI_Pant.WI_Pant",  // Warning: this may cause collision with UpperCloth
-			"/Game/GoodWI/Lower/WI_Track_Pant.WI_Track_Pant"
+			"/Game/GoodWI/Lower/WI_Track_Pant.WI_Track_Pant",
 
 			"/Game/GoodWI/Lower/WI_Baggy_Pants.WI_Baggy_Pants",
 			"/Game/GoodWI/Lower/WI_Cyber_Punk_Pants.WI_Cyber_Punk_Pants",
