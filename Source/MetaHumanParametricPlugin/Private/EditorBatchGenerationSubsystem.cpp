@@ -638,7 +638,7 @@ void UEditorBatchGenerationSubsystem::GenerateRandomCharacterConfigs(
 			"/Game/GoodWI/Lower/WI_Jeans2.WI_Jeans2",
 			"/Game/GoodWI/Lower/WI_Jeans_1.WI_Jeans_1",
 			"/Game/GoodWI/Lower/WI_Jeans_3.WI_Jeans_3",
-			"/Game/GoodWI/Upper/WI_Colorful_Sweats.WI_Colorful_Sweats",
+			"/Game/GoodWI/Lower/WI_Colorful_Sweats.WI_Colorful_Sweats",
 		};
 
 		const TArray<FString> Shoes = {
