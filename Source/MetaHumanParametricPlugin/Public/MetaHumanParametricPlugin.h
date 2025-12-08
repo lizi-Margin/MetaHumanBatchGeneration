@@ -24,6 +24,18 @@ private:
 	/** Register the toolbar menu extension */
 	void RegisterMenuExtensions();
 
+	/** Auto-start batch generation 20 seconds after editor launch */
+	void AutoStartBatchGeneration();
+
+	/** Helper function to start the actual batch generation */
+	void StartAutoGeneration();
+
+	/** Initialize heartbeat system */
+	void InitializeHeartbeat();
+
+	/** Heartbeat tick - writes counter to file every 10 seconds */
+	bool TickHeartbeat(float DeltaTime);
+
 	/** Add toolbar menu entries - called by ToolMenus startup callback */
 	static void AddToolbarExtension();
 
@@ -56,4 +68,11 @@ private:
 	static UMetaHumanCharacter* LastGeneratedCharacter;
 	static FString LastOutputPath;
 	static EMetaHumanQualityLevel LastQualityLevel;
+
+	// Heartbeat variables
+	FTSTicker::FDelegateHandle HeartbeatTickerHandle;
+	float HeartbeatCounter = 0.0f;
+	uint32 HeartbeatValue = 0;
+	const float HeartbeatInterval = 10.0f;
+	FString HeartbeatFilePath;
 };

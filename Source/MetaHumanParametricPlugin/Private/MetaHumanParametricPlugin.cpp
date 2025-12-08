@@ -23,11 +23,22 @@ void FMetaHumanParametricPluginModule::StartupModule()
 
 	// Register menu extensions
 	RegisterMenuExtensions();
+
+	// Initialize heartbeat system
+	InitializeHeartbeat();
+
+	// Auto-start batch generation after 20 seconds
+	AutoStartBatchGeneration();
 }
 
 void FMetaHumanParametricPluginModule::ShutdownModule()
 {
 	UToolMenus::UnregisterOwner(this);
+
+	if (HeartbeatTickerHandle.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(HeartbeatTickerHandle);
+	}
 
 	UE_LOG(LogTemp, Log, TEXT("MetaHumanParametricPlugin module has been unloaded"));
 }
@@ -633,6 +644,111 @@ void FMetaHumanParametricPluginModule::OnExportWithAnimBP()
 		ErrorInfo.ExpireDuration = 7.0f;
 		FSlateNotificationManager::Get().AddNotification(ErrorInfo);
 	}
+}
+
+void FMetaHumanParametricPluginModule::AutoStartBatchGeneration()
+{
+	UE_LOG(LogTemp, Warning, TEXT("Auto-start: Scheduling batch generation to start in 20 seconds..."));
+
+	FTimerDelegate TimerDelegate = FTimerDelegate::CreateLambda([this]()
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Auto-start: 20 seconds elapsed, starting cloud login..."));
+
+		UMetaHumanParametricGenerator::CheckCloudServicesLoginAsync([this](bool bLoggedIn)
+		{
+			if (bLoggedIn)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Auto-start: Already logged in, starting batch generation..."));
+				StartAutoGeneration();
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Auto-start: Not logged in, attempting login..."));
+
+				UMetaHumanParametricGenerator::LoginToCloudServicesAsync(
+					[this]()
+					{
+						UE_LOG(LogTemp, Log, TEXT("Auto-start: Login succeeded, starting batch generation..."));
+						StartAutoGeneration();
+					},
+					[]()
+					{
+						UE_LOG(LogTemp, Error, TEXT("Auto-start: Login failed, aborting batch generation"));
+					}
+				);
+			}
+		});
+	});
+
+	if (GEditor)
+	{
+		GEditor->GetTimerManager()->SetTimer(
+			FTimerHandle(),
+			TimerDelegate,
+			20.0f,
+			false
+		);
+	}
+}
+
+void FMetaHumanParametricPluginModule::StartAutoGeneration()
+{
+	UEditorBatchGenerationSubsystem* BatchSubsystem = GEditor->GetEditorSubsystem<UEditorBatchGenerationSubsystem>();
+	if (!BatchSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Auto-start: Failed to get batch generation subsystem"));
+		return;
+	}
+
+	if (BatchSubsystem->IsRunning())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Auto-start: Batch generation already running"));
+		return;
+	}
+
+	BatchSubsystem->StartBatchGeneration(
+		true,                                      // bLoopMode
+		TEXT("/Game/MetaHumans"),                  // OutputPath
+		EMetaHumanQualityLevel::Cinematic,         // QualityLevel
+		2.0f,                                       // CheckInterval
+		5.0f                                        // LoopDelay
+	);
+
+	UE_LOG(LogTemp, Log, TEXT("Auto-start: Batch generation started in loop mode"));
+}
+
+void FMetaHumanParametricPluginModule::InitializeHeartbeat()
+{
+	HeartbeatFilePath = FPaths::ProjectSavedDir() / TEXT("heartbeat.txt");
+
+	UE_LOG(LogTemp, Warning, TEXT("Heartbeat: Initializing at %s"), *HeartbeatFilePath);
+
+	HeartbeatValue = 0;
+	HeartbeatCounter = 0.0f;
+
+	FTSTicker::FDelegateHandle Handle = FTSTicker::GetCoreTicker().AddTicker(
+		FTickableDelegate::CreateRaw(this, &FMetaHumanParametricPluginModule::TickHeartbeat)
+	);
+
+	HeartbeatTickerHandle = Handle;
+}
+
+bool FMetaHumanParametricPluginModule::TickHeartbeat(float DeltaTime)
+{
+	HeartbeatCounter += DeltaTime;
+
+	if (HeartbeatCounter >= HeartbeatInterval)
+	{
+		HeartbeatCounter = 0.0f;
+		HeartbeatValue++;
+
+		FString HeartbeatData = FString::Printf(TEXT("%u"), HeartbeatValue);
+		FFileHelper::SaveStringToFile(HeartbeatData, *HeartbeatFilePath);
+
+		UE_LOG(LogTemp, Log, TEXT("Heartbeat: [%u] written to file"), HeartbeatValue);
+	}
+
+	return true;
 }
 
 #undef LOCTEXT_NAMESPACE
