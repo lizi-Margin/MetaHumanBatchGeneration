@@ -9,12 +9,34 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 HEARTBEAT_FILE = PROJECT_ROOT / "Saved" / "heartbeat.txt"
-UPROJECT_FILE = PROJECT_ROOT / "HUAWEI_Project.uproject"
-EDITOR_EXE = r"I:\UE_5.6\Engine\Binaries\Win64\UnrealEditor.exe"
 
 STARTUP_TIME = 120
-HEARTBEAT_TIMEOUT = 60
+HEARTBEAT_TIMEOUT = 300
 HEARTBEAT_CHECK_INTERVAL = 5
+editor_exe_candidates = [
+    r"I:\UE_5.6\Engine\Binaries\Win64\UnrealEditor.exe",
+    r"C:\Program Files\Epic Games\UE_5.6\Engine\Binaries\Win64\UnrealEditor.exe",
+]
+
+
+
+def find_uproject_file(root_dir):
+    uproject_files = list(Path(root_dir).glob("*.uproject"))
+    if len(uproject_files) == 0:
+        raise FileNotFoundError(f"No .uproject file found in {root_dir}")
+    if len(uproject_files) > 1:
+        raise RuntimeError(f"Multiple .uproject files found in {root_dir}: {uproject_files}")
+    return uproject_files[0]
+
+def find_editor_exe():
+    for editor_path in editor_exe_candidates:
+        if Path(editor_path).exists():
+            return editor_path
+
+    raise FileNotFoundError(f"Unreal Editor not found in any of: {editor_exe_candidates}")
+
+UPROJECT_FILE = find_uproject_file(PROJECT_ROOT)
+EDITOR_EXE = find_editor_exe()
 
 class HeartbeatMonitor:
     def __init__(self):
