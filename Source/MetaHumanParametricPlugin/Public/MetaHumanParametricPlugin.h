@@ -27,9 +27,6 @@ private:
 	/** Auto-start batch generation 20 seconds after editor launch */
 	void AutoStartBatchGeneration();
 
-	/** Helper function to start the actual batch generation */
-	void StartAutoGeneration();
-
 	/** Initialize heartbeat system */
 	void InitializeHeartbeat();
 
@@ -75,4 +72,5 @@ private:
 	uint32 HeartbeatValue = 0;
 	const float HeartbeatInterval = 10.0f;
 	FString HeartbeatFilePath;
+
 };

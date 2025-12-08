@@ -10,8 +10,9 @@ SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 HEARTBEAT_FILE = PROJECT_ROOT / "Saved" / "heartbeat.txt"
 UPROJECT_FILE = PROJECT_ROOT / "HUAWEI_Project.uproject"
-EDITOR_EXE = r"C:\Program Files\Epic Games\UE_5.6\Engine\Binaries\Win64\UnrealEditor.exe"
+EDITOR_EXE = r"I:\UE_5.6\Engine\Binaries\Win64\UnrealEditor.exe"
 
+STARTUP_TIME = 120
 HEARTBEAT_TIMEOUT = 60
 HEARTBEAT_CHECK_INTERVAL = 5
 
@@ -108,7 +109,8 @@ class HeartbeatMonitor:
                             time.sleep(3)
 
                 if self.editor_process is None or self.editor_process.poll() is not None:
-                    self.start_editor()
+                    if self.start_editor():
+                        time.sleep(STARTUP_TIME)
                     self.last_heartbeat_value = 0
                     self.last_update_time = time.time()
 

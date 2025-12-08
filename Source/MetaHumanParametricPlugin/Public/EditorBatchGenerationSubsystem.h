@@ -46,6 +46,8 @@ public:
 	// Public API
 	// ============================================================================
 
+	void SetAutoStart(bool bAutoStart) { bAutoStartGeneration = bAutoStart; }
+
 	/**
 	 * Start the batch generation process
 	 * @param bLoopMode - If true, continuously generate characters
@@ -150,4 +152,6 @@ private:
 
 	/** Flag to indicate state should be processed */
 	bool bShouldProcessState = true;
+
+	bool bAutoStartGeneration = false;
 };

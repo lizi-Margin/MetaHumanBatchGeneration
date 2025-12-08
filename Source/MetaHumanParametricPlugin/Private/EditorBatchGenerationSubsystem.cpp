@@ -148,6 +148,29 @@ bool UEditorBatchGenerationSubsystem::TickStateMachine(float DeltaTime)
 		}
 	}
 
+	if (bAutoStartGeneration)
+	{
+		if (CurrentState == EBatchGenState::Idle) 
+		{
+			// add async task GameThread
+			AsyncTask(ENamedThreads::GameThread, [this]()
+			{
+				StartBatchGeneration(
+					true,
+					TEXT("/Game/MetaHumans"),               // OutputPath
+					EMetaHumanQualityLevel::Cinematic,      // QualityLevel
+					2.0f,                                    // CheckInterval (check every 2 seconds)
+					5.0f                                     // LoopDelay (5 seconds between characters)
+				);
+			});
+		}
+		if (CurrentState == EBatchGenState::Error)
+		{
+			StopBatchGeneration();
+		}
+	}
+	
+
 	// Return true to keep ticking
 	return true;
 }
